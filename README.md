@@ -1,5 +1,10 @@
 # Splunk Environment Lab
 
+[![GitHub Repo](https://img.shields.io/badge/GitHub-Repo-181717?logo=github&logoColor=white)](https://github.com/farlos3/Splunk-Environment-Lab)
+[![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![Splunk Docs](https://img.shields.io/badge/Splunk-Docs-FFB000?logo=splunk&logoColor=black)](https://docs.splunk.com/Documentation/Splunk)
+[![BOTS v1](https://img.shields.io/badge/BOTS-v1-000000)](https://github.com/splunk/botsv1)
+
 Local Splunk Enterprise running in Docker, pre-wired to load Splunk's
 **BOTSv1** (Boss of the SOC) dataset — real attack telemetry from one of
 Splunk's SOC training competitions. Use it to practice SPL, build
