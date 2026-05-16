@@ -1,0 +1,44 @@
+name: splunklab
+
+services:
+  splunk:
+    image: splunk/splunk:latest
+    container_name: splunk-lab
+    hostname: splunk-lab
+    environment:
+      - SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com
+      - SPLUNK_START_ARGS=--accept-license
+      - SPLUNK_PASSWORD=p@ssw0rd
+      - SPLUNK_HEC_TOKEN=lab-hec-token-CHANGE-ME
+    ports:
+      - "8000:8000"      # Web UI
+      - "8088:8088"      # HTTP Event Collector
+      - "8089:8089"      # Management API
+      - "9997:9997"      # Forwarder receiver
+      - "1514:1514/tcp"  # Syslog TCP (non-privileged port)
+      - "1514:1514/udp"  # Syslog UDP
+    volumes:
+      # BOTSv1 dataset — lives in a named Docker volume, NOT a bind mount.
+      # Splunk's validatedb refuses Windows-host bind mounts ("unusable
+      # filesystem") because Docker Desktop's gRPC-FUSE share doesn't
+      # support the file locking / mmap semantics Splunk requires. The
+      # named volume sits on Docker's native ext4 and works fine.
+      # Populated by setup.sh from ../bots-data/ on first run.
+      # The mount target MUST be `botsv1_data_set` because the archive's
+      # own indexes.conf hardcodes that app name in its bucket paths.
+      - splunk-botsv1:/opt/splunk/etc/apps/botsv1_data_set
+      # Persistent state — survives `docker compose restart`, killed by `down -v`.
+      - splunk-var:/opt/splunk/var
+      - splunk-etc-users:/opt/splunk/etc/users
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fks", "https://localhost:8089/services/server/info"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+volumes:
+  splunk-var:
+  splunk-etc-users:
+  splunk-botsv1:

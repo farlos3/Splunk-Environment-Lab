@@ -1,0 +1,127 @@
+# =============================================================================
+# Splunk-Environment-Lab — what NOT to commit
+# =============================================================================
+# GitHub rejects any single file > 100 MB and warns at 50 MB. The BOTSv1
+# dataset is 6 GB compressed / ~9 GB extracted, with individual bucket
+# files up to 3 GB — none of it belongs in git.
+#
+# Note: .gitignore does NOT support inline comments. Anything after a
+# pattern is treated as part of the pattern. All comments live on their
+# own lines below.
+
+# -----------------------------------------------------------------------------
+# BOTS dataset (whole tree)
+# -----------------------------------------------------------------------------
+bots-data/**
+!bots-data/.gitkeep
+!bots-data/README.md
+
+# Any other bots* folder a user might create
+bots-data-*/**
+botsv*/**
+
+# -----------------------------------------------------------------------------
+# Practice challenges — third-party repo cloned by setup
+# -----------------------------------------------------------------------------
+challenges/
+
+# -----------------------------------------------------------------------------
+# Splunk artefacts — bucket internals, app packages, installers
+# -----------------------------------------------------------------------------
+
+# Index files (often hundreds of MB)
+*.tsidx
+# Splunk bucket archives
+*.bucket
+# Raw event journal inside buckets
+journal.gz
+# Bucket rawdata folders, wherever they appear
+rawdata/
+# Splunk app packages
+*.spl
+# Forwarder + Splunk installers (the one at repo root is ~120 MB)
+splunkforwarder-*
+splunk-*.tgz
+splunk-*.zip
+splunk-*.msi
+
+# Local Splunk state if anyone runs Splunk directly on the host
+var/lib/splunk/
+
+# -----------------------------------------------------------------------------
+# Generic archives & installers — GitHub-hostile
+# -----------------------------------------------------------------------------
+*.tgz
+*.tar
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.zip
+*.7z
+*.rar
+*.iso
+*.dmg
+*.deb
+*.rpm
+*.msi
+*.exe
+
+# -----------------------------------------------------------------------------
+# Secrets & credentials
+# -----------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+*.pfx
+*.p12
+credentials.json
+
+# Splunk leaks $7$ hashes into these on first boot — never commit
+**/passwords.conf
+# server.conf contains pass4SymmKey
+**/server.conf
+
+# -----------------------------------------------------------------------------
+# Python
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# -----------------------------------------------------------------------------
+# Node (just in case)
+# -----------------------------------------------------------------------------
+node_modules/
+dist/
+build/
+
+# -----------------------------------------------------------------------------
+# OS junk
+# -----------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# -----------------------------------------------------------------------------
+# Editor / IDE
+# -----------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.bak
+*.tmp
+
+# -----------------------------------------------------------------------------
+# Logs at repo root only — keep generated samples in subfolders if needed
+# -----------------------------------------------------------------------------
+/*.log
