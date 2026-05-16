@@ -92,16 +92,6 @@ and `splunk-etc-users` (user dashboards) but keeps `splunk-botsv1`
 intact — so the BOTSv1 data is immediately available after the next
 boot, no re-copy needed.
 
-## Why BOTS instead of synthetic logs
-
-| Aspect | Hand-written generator | BOTS dataset |
-|---|---|---|
-| Realism | Templated, predictable patterns | Real attack from Splunk's SOC training competition |
-| Sourcetypes | Whatever you implement | 30+ production sourcetypes already CIM-aligned |
-| Maintenance | You own format drift | Frozen snapshot, no maintenance |
-| License consumption | Counts against 500 MB/day | **Pre-indexed buckets — bypasses the ingest meter** |
-| Time | Real-time stream | Snapshot (Aug 2016 for BOTSv1) — search with `earliest=0` |
-
 ## Practice — BOTSv1 challenges
 
 `setup` automatically clones <https://github.com/chan2git/splunk-bots>
@@ -190,13 +180,3 @@ re-download/re-extract before the next `setup -Force` or `reset -Full`.
 | 8089 | Splunk REST / Management | for CLI / API |
 | 9997 | Forwarder receiver | for a future Universal Forwarder |
 | 1514/tcp+udp | Syslog | non-privileged (container can't bind 514) |
-
-## Future work
-
-- Install Splunk Universal Forwarder on your workstation, point it at
-  port 9997, and stream live local events alongside the BOTS data.
-- Install **Splunk Security Essentials** (`Apps → Browse more apps`)
-  to get ready-made detection content that runs against BOTS data.
-- Pull additional BOTS versions (v2, v3) — each would need its own
-  named volume since their `indexes.conf` files expect different app
-  folder names.
