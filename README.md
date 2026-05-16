@@ -3,7 +3,7 @@
 [![GitHub Repo](https://img.shields.io/badge/GitHub-Repo-181717?logo=github&logoColor=white)](https://github.com/farlos3/Splunk-Environment-Lab)
 [![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 [![Splunk Docs](https://img.shields.io/badge/Splunk-Docs-FFB000?logo=splunk&logoColor=black)](https://docs.splunk.com/Documentation/Splunk)
-[![SOC](https://img.shields.io/badge/SOC-Operations-0B7285)](https://www.splunk.com/en_us/solutions/security-operations-center.html)
+[![SOC](https://img.shields.io/badge/SOC-Operations-0B7285)](https://github.com/icdfa/soc-training-program)
 [![BOTS v1](https://img.shields.io/badge/BOTS-v1-000000)](https://github.com/splunk/botsv1)
 
 Local Splunk Enterprise running in Docker, pre-wired to load Splunk's
