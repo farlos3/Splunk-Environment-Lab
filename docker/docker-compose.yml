@@ -18,15 +18,19 @@ services:
       - "1514:1514/tcp"  # Syslog TCP (non-privileged port)
       - "1514:1514/udp"  # Syslog UDP
     volumes:
-      # BOTSv1 dataset — lives in a named Docker volume, NOT a bind mount.
-      # Splunk's validatedb refuses Windows-host bind mounts ("unusable
-      # filesystem") because Docker Desktop's gRPC-FUSE share doesn't
-      # support the file locking / mmap semantics Splunk requires. The
-      # named volume sits on Docker's native ext4 and works fine.
-      # Populated by setup.sh from ../bots-data/ on first run.
-      # The mount target MUST be `botsv1_data_set` because the archive's
-      # own indexes.conf hardcodes that app name in its bucket paths.
+      # BOTS datasets — each lives in its own named Docker volume, NOT a
+      # bind mount. Splunk's validatedb refuses Windows-host bind mounts
+      # ("unusable filesystem") because Docker Desktop's gRPC-FUSE share
+      # doesn't support the file locking / mmap semantics Splunk
+      # requires. The named volumes sit on Docker's native ext4 and work
+      # fine. Each is populated by setup.sh from ../bots-data/bots<vN>/
+      # on first run. The mount targets MUST be `bots<vN>_data_set`
+      # because each archive's indexes.conf hardcodes that app name in
+      # its bucket paths. An empty volume = empty app dir, which Splunk
+      # simply ignores — so unused versions are harmless.
       - splunk-botsv1:/opt/splunk/etc/apps/botsv1_data_set
+      - splunk-botsv2:/opt/splunk/etc/apps/botsv2_data_set
+      - splunk-botsv3:/opt/splunk/etc/apps/botsv3_data_set
       # Persistent state — survives `docker compose restart`, killed by `down -v`.
       - splunk-var:/opt/splunk/var
       - splunk-etc-users:/opt/splunk/etc/users
@@ -42,3 +46,5 @@ volumes:
   splunk-var:
   splunk-etc-users:
   splunk-botsv1:
+  splunk-botsv2:
+  splunk-botsv3:

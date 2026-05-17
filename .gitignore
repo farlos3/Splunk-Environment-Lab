@@ -10,15 +10,21 @@
 # own lines below.
 
 # -----------------------------------------------------------------------------
-# BOTS dataset (whole tree)
+# BOTS datasets (whole tree). Keep the per-version directory structure in
+# git so setup scripts have somewhere to drop downloads, but block all
+# extracted data and archives.
 # -----------------------------------------------------------------------------
 bots-data/**
-!bots-data/.gitkeep
 !bots-data/README.md
+!bots-data/botsv1/
+!bots-data/botsv2/
+!bots-data/botsv3/
+!bots-data/botsv1/.gitkeep
+!bots-data/botsv2/.gitkeep
+!bots-data/botsv3/.gitkeep
 
 # Any other bots* folder a user might create
 bots-data-*/**
-botsv*/**
 
 # -----------------------------------------------------------------------------
 # Splunk artefacts — bucket internals, app packages, installers

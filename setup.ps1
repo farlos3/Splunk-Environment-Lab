@@ -1,29 +1,41 @@
-# One-shot bootstrap for the Splunk + BOTSv1 lab.
+# One-shot bootstrap for the Splunk + BOTS lab.
 #
 # Why it's not a simple "compose up": Splunk's validatedb refuses to use
-# the BOTSv1 buckets when they live on a Docker Desktop Windows bind
+# the BOTS buckets when they live on a Docker Desktop Windows bind
 # mount ("unusable filesystem" — gRPC-FUSE lacks the locking/mmap
-# semantics Splunk wants). So we stage the dataset in .\bots-data\ on
-# the host, then COPY it into a native Docker named volume that the
+# semantics Splunk wants). So we stage each dataset in .\bots-data\<vN>\
+# on the host, then COPY it into a native Docker named volume that the
 # Splunk container actually reads from.
 #
-# Steps (all idempotent):
-#   1. download BOTSv1 .tgz into bots-data\  (resume-friendly)
-#   2. validate + extract into bots-data\  (skipped if already done)
-#   3. copy bots-data\ into the splunk-botsv1 named volume
+# Steps (all idempotent, per selected dataset):
+#   1. download <vN> .tgz into bots-data\<vN>\  (resume-friendly)
+#   2. validate + extract into bots-data\<vN>\  (skipped if already done)
+#   3. copy bots-data\<vN>\ into the splunk-<vN> named volume
 #      (skipped if the volume already contains a default\ folder)
 #   4. docker compose up -d
 #   5. wait for the container to become healthy
-#   6. verify the botsv1 app + index are visible to Splunk
+#   6. verify each selected app + index is visible to Splunk
 #
 # Usage:
-#   .\setup.ps1
-#   .\setup.ps1 -Url https://custom.example/botsv1.tgz
-#   .\setup.ps1 -SkipDownload
-#   .\setup.ps1 -Force                # re-extract AND re-populate volume
+#   .\setup.ps1                          # default: BOTSv1 only
+#   .\setup.ps1 -V1 -V2                  # multiple datasets
+#   .\setup.ps1 -All                     # v1, v2, v3
+#   .\setup.ps1 -V2 -SkipDownload        # use the .tgz already in bots-data\botsv2\
+#   .\setup.ps1 -V1 -Force               # re-extract AND re-populate v1 volume
+#   .\setup.ps1 -V1 -UrlV1 https://custom.example/botsv1.tgz
+#
+# Practice challenges under challenges\splunk-bots\ are vendored from
+# https://github.com/chan2git/splunk-bots — refer to that upstream for
+# the original walkthroughs.
 
 param(
-    [string]$Url     = "https://s3.amazonaws.com/botsdataset/botsv1/splunk-pre-indexed/botsv1_data_set.tgz",
+    [switch]$V1,
+    [switch]$V2,
+    [switch]$V3,
+    [switch]$All,
+    [string]$UrlV1 = "https://s3.amazonaws.com/botsdataset/botsv1/splunk-pre-indexed/botsv1_data_set.tgz",
+    [string]$UrlV2 = "https://botsdataset.s3.amazonaws.com/botsv2/botsv2_data_set.tgz",
+    [string]$UrlV3 = "https://botsdataset.s3.amazonaws.com/botsv3/botsv3_data_set.tgz",
     [switch]$SkipDownload,
     [switch]$Force
 )
@@ -31,17 +43,26 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot    = $PSScriptRoot
 $composeFile = Join-Path $repoRoot "docker\docker-compose.yml"
-$botsDir     = Join-Path $repoRoot "bots-data"
+$botsBase    = Join-Path $repoRoot "bots-data"
 $container   = "splunk-lab"
 $splunkPass  = "p@ssw0rd"
-# Named volume created by docker compose. Compose prefixes with the
-# project name ("name: splunklab" at the top of docker-compose.yml).
-$volumeName    = "splunklab_splunk-botsv1"
-$splunkUid     = 41812
+$splunkUid   = 41812
 
-# Practice challenges under challenges\splunk-bots\ are vendored into this
-# repo. They originate from https://github.com/chan2git/splunk-bots — refer
-# to that upstream for the original walkthroughs and any updates.
+# Per-dataset metadata. The HEAD check will catch URLs that have moved;
+# if any of these stop working, override with -UrlVN or drop the .tgz
+# manually into bots-data\<vN>\ and pass -SkipDownload.
+$datasets = @{
+    v1 = @{ Url = $UrlV1; Size = "~6 GB"  }
+    v2 = @{ Url = $UrlV2; Size = "~28 GB" }
+    v3 = @{ Url = $UrlV3; Size = "~3.5 GB" }
+}
+
+$selected = New-Object System.Collections.Generic.List[string]
+if ($All) { $selected.AddRange([string[]]@("v1","v2","v3")) }
+if ($V1 -and -not $selected.Contains("v1")) { $selected.Add("v1") }
+if ($V2 -and -not $selected.Contains("v2")) { $selected.Add("v2") }
+if ($V3 -and -not $selected.Contains("v3")) { $selected.Add("v3") }
+if ($selected.Count -eq 0) { $selected.Add("v1") }   # default
 
 function Write-Step($msg) {
     Write-Host ""
@@ -55,7 +76,19 @@ function Format-Size($bytes) {
     return "$bytes bytes"
 }
 
-function Test-VolumeHasData {
+function Get-Version($v) {
+    [pscustomobject]@{
+        Label  = $v
+        Url    = $datasets[$v].Url
+        Size   = $datasets[$v].Size
+        Dir    = Join-Path $botsBase "bots$v"
+        Volume = "splunklab_splunk-bots$v"
+        App    = "bots${v}_data_set"
+        Index  = "bots$v"
+    }
+}
+
+function Test-VolumeHasData($volumeName) {
     & docker volume inspect $volumeName *> $null
     if ($LASTEXITCODE -ne 0) { return $false }
     & docker run --rm -v "${volumeName}:/c" alpine test -d /c/default *> $null
@@ -73,44 +106,54 @@ foreach ($cmd in @("docker", "tar", "curl.exe")) {
     }
 }
 Write-Info "docker, tar, curl available"
+Write-Info "datasets selected: $($selected -join ', ')"
 
 # ---------------------------------------------------------------------------
-# 1 + 2. Get the dataset extracted on host (staging area)
+# Per-dataset: download → validate → extract → populate volume
 # ---------------------------------------------------------------------------
-$alreadyExtracted = Test-Path (Join-Path $botsDir "default")
-if ($alreadyExtracted -and -not $Force) {
-    Write-Step "BOTSv1 already extracted on host — skipping download/extract"
-    Write-Info "  found: $botsDir\default\"
-    Write-Info "  (re-run with -Force to overwrite)"
-} else {
+
+function Invoke-PrepareHostExtract($ds) {
+    $v = $ds.Label
+    if (-not (Test-Path $ds.Dir)) {
+        New-Item -ItemType Directory -Force -Path $ds.Dir | Out-Null
+    }
+
+    $alreadyExtracted = Test-Path (Join-Path $ds.Dir "default")
+    if ($alreadyExtracted -and -not $Force) {
+        Write-Step "[$v] already extracted on host — skipping download/extract"
+        Write-Info "  found: $($ds.Dir)\default\"
+        Write-Info "  (re-run with -Force to overwrite)"
+        return
+    }
+
     if ($Force -and $alreadyExtracted) {
-        Write-Step "Wiping existing bots-data\ contents (Force)"
-        Get-ChildItem -Path $botsDir -Force |
+        Write-Step "[$v] wiping existing extracted contents (Force)"
+        Get-ChildItem -Path $ds.Dir -Force |
             Where-Object { $_.Name -notin @(".gitkeep", "README.md") -and $_.Extension -ne ".tgz" } |
             Remove-Item -Recurse -Force
     }
 
-    $tgz = Get-ChildItem -Path $botsDir -Filter "*.tgz" -ErrorAction SilentlyContinue |
+    $tgz = Get-ChildItem -Path $ds.Dir -Filter "*.tgz" -ErrorAction SilentlyContinue |
            Select-Object -First 1
 
     $remoteSize = $null
     if (-not $SkipDownload) {
-        Write-Step "Querying server for archive metadata"
-        Write-Info $Url
+        Write-Step "[$v] querying server for archive metadata"
+        Write-Info $ds.Url
         $tmpHead = New-TemporaryFile
-        $httpCode = & curl.exe -sIL --max-time 30 -o $tmpHead.FullName -w "%{http_code}" $Url
+        $httpCode = & curl.exe -sIL --max-time 30 -o $tmpHead.FullName -w "%{http_code}" $ds.Url
         $headOut = Get-Content $tmpHead.FullName -Raw -ErrorAction SilentlyContinue
         Remove-Item $tmpHead.FullName -ErrorAction SilentlyContinue
 
         if ($httpCode -notmatch '^(200|301|302)$') {
             Write-Host ""
-            Write-Host "ERROR: HEAD request returned HTTP $httpCode — URL is dead or unreachable." -ForegroundColor Red
+            Write-Host "ERROR: [$v] HEAD request returned HTTP $httpCode — URL is dead or unreachable." -ForegroundColor Red
             Write-Host ""
-            Write-Host "Splunk has changed the BOTSv1 download URL several times. Please:"
-            Write-Host "  1. Open https://github.com/splunk/botsv1"
+            Write-Host "Splunk has changed the BOTS download URLs several times. Please:"
+            Write-Host "  1. Open https://github.com/splunk/bots$v"
             Write-Host "  2. Follow the current Download instructions"
-            Write-Host "  3. Save the .tgz into:  $botsDir"
-            Write-Host "  4. Re-run .\setup.ps1"
+            Write-Host "  3. Save the .tgz into:  $($ds.Dir)"
+            Write-Host "  4. Re-run  .\setup.ps1 -$($v.ToUpper()) -SkipDownload"
             exit 1
         }
         if ($headOut) {
@@ -123,7 +166,7 @@ if ($alreadyExtracted -and -not $Force) {
     }
 
     if ($tgz) {
-        Write-Step "Found existing archive in bots-data\"
+        Write-Step "[$v] found existing archive"
         Write-Info "path : $($tgz.FullName)"
         $localSize = $tgz.Length
         Write-Info "size : $(Format-Size $localSize)"
@@ -134,29 +177,29 @@ if ($alreadyExtracted -and -not $Force) {
             Write-Info "matches remote size — download not needed"
         } elseif ($localSize -lt $remoteSize) {
             $pct = [math]::Round(($localSize * 100.0) / $remoteSize, 1)
-            Write-Step "Resuming partial download (have $pct% of file)"
-            & curl.exe -L --fail -C - --progress-bar -o $tgz.FullName $Url
+            Write-Step "[$v] resuming partial download (have $pct% of file)"
+            & curl.exe -L --fail -C - --progress-bar -o $tgz.FullName $ds.Url
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             $tgz = Get-Item $tgz.FullName
         } else {
-            Write-Host "WARNING: local file is LARGER than remote — likely corrupt." -ForegroundColor Yellow
-            Write-Host "         Delete bots-data\$($tgz.Name) and re-run." -ForegroundColor Yellow
+            Write-Host "WARNING: [$v] local file is LARGER than remote — likely corrupt." -ForegroundColor Yellow
+            Write-Host "         Delete $($tgz.FullName) and re-run." -ForegroundColor Yellow
             exit 1
         }
     } else {
         if ($SkipDownload) {
-            Write-Host "ERROR: no .tgz found in bots-data\ and -SkipDownload set." -ForegroundColor Red
+            Write-Host "ERROR: [$v] no .tgz found in $($ds.Dir) and -SkipDownload set." -ForegroundColor Red
             exit 1
         }
-        $tgzPath = Join-Path $botsDir "botsv1_data_set.tgz"
-        Write-Step "Downloading BOTSv1 (~6 GB)"
+        $tgzPath = Join-Path $ds.Dir "bots${v}_data_set.tgz"
+        Write-Step "[$v] downloading BOTS$v ($($ds.Size))"
         Write-Info "destination: $tgzPath"
-        & curl.exe -L --fail -C - --progress-bar -o $tgzPath $Url
+        & curl.exe -L --fail -C - --progress-bar -o $tgzPath $ds.Url
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         $tgz = Get-Item $tgzPath
     }
 
-    Write-Step "Validating archive integrity"
+    Write-Step "[$v] validating archive integrity"
     & tar -tzf $tgz.FullName *> $null
     if ($LASTEXITCODE -ne 0) {
         Write-Host "ERROR: '$($tgz.FullName)' is not a valid gzipped tar." -ForegroundColor Red
@@ -164,28 +207,29 @@ if ($alreadyExtracted -and -not $Force) {
     }
     Write-Info "archive looks good"
 
-    Write-Step "Extracting $($tgz.Name) ($(Format-Size $tgz.Length)) into bots-data\"
-    tar -xzf $tgz.FullName -C $botsDir --strip-components 1
+    Write-Step "[$v] extracting $($tgz.Name) ($(Format-Size $tgz.Length)) into bots-data\bots$v\"
+    tar -xzf $tgz.FullName -C $ds.Dir --strip-components 1
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     foreach ($d in @("default", "metadata")) {
-        if (-not (Test-Path (Join-Path $botsDir $d))) {
-            Write-Host "WARNING: expected folder '$d' missing after extraction." -ForegroundColor Yellow
+        if (-not (Test-Path (Join-Path $ds.Dir $d))) {
+            Write-Host "WARNING: [$v] expected folder '$d' missing after extraction." -ForegroundColor Yellow
         }
     }
 }
 
-# ---------------------------------------------------------------------------
-# 3. Populate the named volume from bots-data\
-# ---------------------------------------------------------------------------
-Write-Step "Checking BOTSv1 named volume"
-if ((Test-VolumeHasData) -and -not $Force) {
-    Write-Info "$volumeName already populated — skipping copy"
-    Write-Info "(re-run with -Force to repopulate)"
-} else {
-    Write-Info "Splunk can't index the BOTSv1 buckets directly from the Windows bind"
+function Invoke-PopulateVolume($ds) {
+    $v = $ds.Label
+    Write-Step "[$v] checking named volume $($ds.Volume)"
+    if ((Test-VolumeHasData $ds.Volume) -and -not $Force) {
+        Write-Info "already populated — skipping copy"
+        Write-Info "(re-run with -Force to repopulate)"
+        return
+    }
+
+    Write-Info "Splunk can't index BOTS buckets directly from the Windows bind"
     Write-Info "mount (Docker Desktop's gRPC-FUSE share is rejected by validatedb)."
-    Write-Info "We copy into a native Docker volume instead."
+    Write-Info "Copying into a native Docker volume instead."
 
     $running = & docker ps --format '{{.Names}}' | Where-Object { $_ -eq $container }
     if ($running) {
@@ -194,23 +238,30 @@ if ((Test-VolumeHasData) -and -not $Force) {
     }
 
     if ($Force) {
-        & docker volume inspect $volumeName *> $null
+        & docker volume inspect $ds.Volume *> $null
         if ($LASTEXITCODE -eq 0) {
             Write-Info "wiping volume (Force)"
-            & docker volume rm $volumeName *> $null
+            & docker volume rm $ds.Volume *> $null
         }
     }
 
-    Write-Step "Copying bots-data\ into $volumeName (~5 min for ~9 GB)"
+    Write-Step "[$v] copying bots-data\bots$v\ into $($ds.Volume)"
     & docker run --rm `
-        -v "${botsDir}:/src:ro" `
-        -v "${volumeName}:/dst" `
+        -v "$($ds.Dir):/src:ro" `
+        -v "$($ds.Volume):/dst" `
         alpine sh -c "set -e; cp -a /src/. /dst/ && rm -f /dst/*.tgz && chown -R ${splunkUid}:${splunkUid} /dst && du -sh /dst"
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "ERROR: volume populate failed (exit $LASTEXITCODE)" -ForegroundColor Red
+        Write-Host "ERROR: [$v] volume populate failed (exit $LASTEXITCODE)" -ForegroundColor Red
         exit $LASTEXITCODE
     }
     Write-Info "volume populated"
+}
+
+foreach ($v in @("v1", "v2", "v3")) {
+    if (-not $selected.Contains($v)) { continue }
+    $ds = Get-Version $v
+    Invoke-PrepareHostExtract $ds
+    Invoke-PopulateVolume   $ds
 }
 
 # ---------------------------------------------------------------------------
@@ -243,22 +294,24 @@ if ($status -ne "healthy") {
 }
 
 # ---------------------------------------------------------------------------
-# 6. Verify Splunk loaded the app + index has data
+# 6. Verify selected datasets in Splunk
 # ---------------------------------------------------------------------------
-Write-Step "Verifying BOTSv1 in Splunk"
+Write-Step "Verifying selected BOTS datasets in Splunk"
 Start-Sleep -Seconds 3
-$appCode = & curl.exe -ks -u "admin:$splunkPass" -o NUL -w "%{http_code}" `
-    "https://localhost:8089/services/apps/local/botsv1_data_set"
-Write-Info "app  : HTTP $appCode (200 = loaded)"
-
-$idxJson = & curl.exe -ks -u "admin:$splunkPass" `
-    "https://localhost:8089/services/data/indexes/botsv1?output_mode=json"
-$idxCount = "?"
-if ($idxJson) {
-    $m = [regex]::Match($idxJson, '"totalEventCount":\s*"?(\d+)"?')
-    if ($m.Success) { $idxCount = $m.Groups[1].Value }
+foreach ($v in @("v1", "v2", "v3")) {
+    if (-not $selected.Contains($v)) { continue }
+    $ds = Get-Version $v
+    $appCode = & curl.exe -ks -u "admin:$splunkPass" -o NUL -w "%{http_code}" `
+        "https://localhost:8089/services/apps/local/$($ds.App)"
+    $idxJson = & curl.exe -ks -u "admin:$splunkPass" `
+        "https://localhost:8089/services/data/indexes/$($ds.Index)?output_mode=json"
+    $idxCount = "?"
+    if ($idxJson) {
+        $m = [regex]::Match($idxJson, '"totalEventCount":\s*"?(\d+)"?')
+        if ($m.Success) { $idxCount = $m.Groups[1].Value }
+    }
+    Write-Info "[$v] app: HTTP $appCode (200 = loaded)   index: $idxCount events"
 }
-Write-Info "index: $idxCount events"
 
 # ---------------------------------------------------------------------------
 # Done
@@ -271,6 +324,8 @@ Write-Host "  Web UI   : http://localhost:8000"
 Write-Host "  Username : admin"
 Write-Host "  Password : $splunkPass"
 Write-Host ""
-Write-Host "Sample search (set time range to 'All time' — data is from Aug 2016):" -ForegroundColor Cyan
+Write-Host "Sample searches (set time range to 'All time'):" -ForegroundColor Cyan
 Write-Host "  index=botsv1 earliest=0 | stats count by sourcetype"
+Write-Host "  index=botsv2 earliest=0 | stats count by sourcetype"
+Write-Host "  index=botsv3 earliest=0 | stats count by sourcetype"
 Write-Host ""

@@ -10,15 +10,15 @@
 #   - splunk-etc-users volume (saved searches, dashboards)
 #
 # What this DOES NOT touch (default):
-#   - splunk-botsv1 volume (the 9 GB BOTSv1 index — kept so we don't
-#     re-copy from bots-data/ for 5 min on every reset)
-#   - bots-data/ on the host
+#   - splunk-botsv1 / splunk-botsv2 / splunk-botsv3 volumes (the BOTS
+#     indexes — kept so we don't re-copy from bots-data\ on every reset)
+#   - bots-data\ on the host
 #
-# Pass -Full to also wipe splunk-botsv1. The next setup.ps1 run will then
-# re-populate it from bots-data/ (~5 min copy).
+# Pass -Full to also wipe the BOTS volumes. The next setup.ps1 run will
+# then re-populate the requested datasets from bots-data\<vN>\.
 #
 # Usage:
-#   .\docker\reset.ps1            # fast reset, keep BOTSv1 volume
+#   .\docker\reset.ps1            # fast reset, keep BOTS volumes
 #   .\docker\reset.ps1 -Full      # nuke EVERYTHING, requires re-populate
 #   .\docker\reset.ps1 -Force     # skip confirmation
 
@@ -28,17 +28,18 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$composeFile = Join-Path $PSScriptRoot "docker-compose.yml"
-$keepVolumes = @("splunklab_splunk-botsv1")
+$composeFile   = Join-Path $PSScriptRoot "docker-compose.yml"
+$botsVolumes   = @("splunklab_splunk-botsv1", "splunklab_splunk-botsv2", "splunklab_splunk-botsv3")
+$stateVolumes  = @("splunklab_splunk-var", "splunklab_splunk-etc-users")
 
 Write-Host ""
 Write-Host "Splunk Lab — Reset" -ForegroundColor Cyan
 Write-Host "----------------------------------------"
 Write-Host "Compose file : $composeFile"
 if ($Full) {
-    Write-Host "Mode         : FULL (wipes splunk-botsv1 too — next setup re-populates)" -ForegroundColor Yellow
+    Write-Host "Mode         : FULL (wipes BOTS volumes too — next setup re-populates)" -ForegroundColor Yellow
 } else {
-    Write-Host "Mode         : fast  (keeps splunk-botsv1 — re-uses ~9 GB BOTSv1 data)"
+    Write-Host "Mode         : fast  (keeps BOTS volumes — re-uses indexed data)"
 }
 Write-Host ""
 
@@ -54,11 +55,11 @@ Write-Host "==> Stopping container (without --volumes so we control what's wiped
 docker compose -f $composeFile down --remove-orphans
 
 if ($Full) {
-    Write-Host "==> Removing ALL named volumes (including splunk-botsv1)" -ForegroundColor Green
-    docker volume rm splunklab_splunk-var splunklab_splunk-etc-users splunklab_splunk-botsv1 2>$null
+    Write-Host "==> Removing ALL named volumes (including BOTS data)" -ForegroundColor Green
+    docker volume rm ($stateVolumes + $botsVolumes) 2>$null
 } else {
-    Write-Host "==> Removing only state volumes (keeping splunk-botsv1)" -ForegroundColor Green
-    docker volume rm splunklab_splunk-var splunklab_splunk-etc-users 2>$null
+    Write-Host "==> Removing only state volumes (keeping BOTS data)" -ForegroundColor Green
+    docker volume rm $stateVolumes 2>$null
 }
 
 Write-Host "==> Starting fresh Splunk container" -ForegroundColor Green
@@ -71,7 +72,7 @@ Write-Host "  Username : admin"
 Write-Host "  Password : p@ssw0rd"
 Write-Host ""
 if ($Full) {
-    Write-Host "BOTSv1 volume was wiped — run setup.ps1 to re-populate (~5 min)." -ForegroundColor Yellow
+    Write-Host "BOTS volumes were wiped — run setup.ps1 [-V1|-V2|-V3|-All] to re-populate." -ForegroundColor Yellow
 } else {
     Write-Host "Tail boot log: docker logs -f splunk-lab"
 }

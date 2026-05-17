@@ -7,79 +7,108 @@
 [![BOTS v1](https://img.shields.io/badge/BOTS-v1-000000)](https://github.com/splunk/botsv1)
 
 Local Splunk Enterprise running in Docker, pre-wired to load Splunk's
-**BOTSv1** (Boss of the SOC) dataset — real attack telemetry from one of
-Splunk's SOC training competitions. Use it to practice SPL, build
-detections, and validate dashboards against data that looks like a real
-incident.
+**BOTS** (Boss of the SOC) datasets — real attack telemetry from
+Splunk's SOC training competitions. Pick any combination of **v1**,
+**v2**, **v3** at setup time. Use them to practice SPL, build
+detections, and validate dashboards against data that looks like a
+real incident.
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
 │                    Splunk container (splunk-lab)                   │
 │                                                                    │
-│   /opt/splunk/etc/apps/botsv1_data_set/  ← Docker volume           │
-│                                            (splunklab_splunk-botsv1)
+│   /opt/splunk/etc/apps/botsv1_data_set/  ← splunklab_splunk-botsv1 │
+│   /opt/splunk/etc/apps/botsv2_data_set/  ← splunklab_splunk-botsv2 │
+│   /opt/splunk/etc/apps/botsv3_data_set/  ← splunklab_splunk-botsv3 │
 │                                                                    │
-│   /opt/splunk/var                        ← Docker volume           │
-│   /opt/splunk/etc/users                  ← Docker volume           │
+│   /opt/splunk/var                        ← splunklab_splunk-var    │
+│   /opt/splunk/etc/users                  ← splunklab_splunk-etc-…  │
 └────────────────────────────────────────────────────────────────────┘
        Web UI :8000   HEC :8088   Mgmt :8089   Fwd :9997   Syslog :1514
 
-     bots-data/  (host staging)  ──one-time copy──▶  splunk-botsv1 volume
-     downloaded .tgz + extracted                     ~9 GB, Docker-native FS
+   bots-data/botsv1/ (host staging) ─one-time copy─▶ splunk-botsv1 volume
+   bots-data/botsv2/                                 splunk-botsv2 volume
+   bots-data/botsv3/                                 splunk-botsv3 volume
 ```
 
 > **Why a volume, not a bind mount?**  Docker Desktop on Windows exposes
 > host files via gRPC-FUSE, which lacks the file-locking and mmap
 > semantics Splunk's `validatedb` requires. Splunk refuses to use such
-> paths as an index home ("unusable filesystem"). So we stage the
-> dataset in `bots-data/` on the host, then copy it into a named volume
-> that lives on Docker's native ext4 — Splunk is happy with that.
+> paths as an index home ("unusable filesystem"). So we stage each
+> dataset in `bots-data/bots<vN>/` on the host, then copy it into a
+> named volume that lives on Docker's native ext4 — Splunk is happy
+> with that.
 
 ## Quick start
 
 ```powershell
-.\setup.ps1            # Windows
-./setup.sh             # Linux / macOS
+# Windows
+.\setup.ps1                  # default: BOTSv1 only
+.\setup.ps1 -V1 -V2          # BOTSv1 + BOTSv2
+.\setup.ps1 -All             # v1 + v2 + v3
 ```
 
-That single command will:
-1. Download BOTSv1 `.tgz` (~6 GB) into `bots-data/` — resumes if interrupted
-2. Validate + extract into `bots-data/` (~9 GB)
-3. Copy `bots-data/` into the `splunk-botsv1` Docker volume (~5 min, one time)
-4. `docker compose up -d`
-5. Wait for Splunk to be healthy + verify the `botsv1` index has events
+```bash
+# Linux / macOS
+./setup.sh                   # default: BOTSv1 only
+./setup.sh --v1 --v2         # BOTSv1 + BOTSv2
+./setup.sh --all             # v1 + v2 + v3
+```
 
-Total first run: ~30-60 minutes depending on bandwidth + disk speed.
+For each selected dataset the script will:
+1. Download `<vN>` `.tgz` into `bots-data/bots<vN>/` — resumes if interrupted
+2. Validate + extract into `bots-data/bots<vN>/`
+3. Copy it into the `splunk-bots<vN>` Docker volume (one-time)
+
+Then it brings the container up, waits for healthy, and verifies each
+loaded `bots<vN>` index has events.
+
+Approximate sizes:
+
+| Dataset | Compressed | First-run time |
+| --- | --- | --- |
+| BOTSv1 | ~6 GB | ~30-60 min |
+| BOTSv2 | ~28 GB | hours |
+| BOTSv3 | ~3.5 GB | ~20-40 min |
 
 When it finishes, open <http://localhost:8000> (`admin` / `p@ssw0rd`),
-set the time picker to **All time** (data is from August 2016), and run:
+set the time picker to **All time**, and run any of:
 
 ```spl
 index=botsv1 earliest=0 | stats count by sourcetype
+index=botsv2 earliest=0 | stats count by sourcetype
+index=botsv3 earliest=0 | stats count by sourcetype
 ```
 
-You should see ~33 million events across `WinEventLog:Security`,
-`fgt_traffic`, `XmlWinEventLog:Microsoft-Windows-Sysmon/Operational`,
-`iis`, `nessus:scan`, and more.
+For BOTSv1 you should see ~33 million events across
+`WinEventLog:Security`, `fgt_traffic`,
+`XmlWinEventLog:Microsoft-Windows-Sysmon/Operational`, `iis`,
+`nessus:scan`, and more.
 
 ### Setup script options
 
 ```powershell
-.\setup.ps1 -Url https://custom.example/botsv1.tgz   # override download URL
-.\setup.ps1 -SkipDownload                            # fail if .tgz not local
-.\setup.ps1 -Force                                   # re-extract AND re-populate volume
+.\setup.ps1 -V2 -UrlV2 https://custom.example/botsv2.tgz   # override URL
+.\setup.ps1 -V1 -SkipDownload                              # fail if .tgz not local
+.\setup.ps1 -V1 -Force                                     # re-extract AND re-populate volume
+```
+
+```bash
+./setup.sh --v2 --url-v2 https://custom.example/botsv2.tgz
+./setup.sh --v1 --skip-download
+./setup.sh --v1 --force
 ```
 
 ### If auto-download fails
 
-Splunk has moved the BOTSv1 download URL a few times. If the script
-reports the default URL is dead:
+Splunk has moved the BOTS download URLs several times. If the script
+reports a URL is dead:
 
-1. Open <https://github.com/splunk/botsv1>
+1. Open <https://github.com/splunk/botsv1> (or `botsv2` / `botsv3`)
 2. Follow the current Download section
-3. Drop the `.tgz` into `bots-data/`
-4. Re-run `setup.ps1` / `setup.sh` — it will skip the download step and
-   extract what you provided
+3. Drop the `.tgz` into `bots-data/bots<vN>/`
+4. Re-run `setup` with `--<vN> --skip-download` (bash) or
+   `-<VN> -SkipDownload` (PowerShell)
 
 ## Resetting
 
@@ -89,14 +118,15 @@ data is pre-indexed so it keeps working under Free, but to refresh the
 trial:
 
 ```powershell
-.\docker\reset.ps1            # fast — wipes container + state, keeps BOTSv1 volume
-.\docker\reset.ps1 -Full      # nuke everything; next setup re-populates (~5 min)
+.\docker\reset.ps1            # fast — wipes container + state, keeps BOTS volumes
+.\docker\reset.ps1 -Full      # nuke everything; next setup re-populates
 ```
 
 Fast reset (default) wipes `splunk-var` (trial state, _internal logs)
-and `splunk-etc-users` (user dashboards) but keeps `splunk-botsv1`
-intact — so the BOTSv1 data is immediately available after the next
-boot, no re-copy needed.
+and `splunk-etc-users` (user dashboards) but keeps the
+`splunk-botsv1` / `splunk-botsv2` / `splunk-botsv3` volumes intact —
+so the BOTS data is immediately available after the next boot, no
+re-copy needed.
 
 ## Practice — BOTSv1 challenges
 
@@ -164,22 +194,22 @@ Splunk-Environment-Lab/
 ├── setup.ps1 / setup.sh        ← one-shot bootstrap (download + extract + copy + up)
 ├── docker/
 │   ├── docker-compose.yml      ← splunk service + named volumes + ports
-│   └── reset.ps1 / reset.sh    ← nuke + restart; -Full also wipes BOTSv1 volume
-├── bots-data/                  ← staging area (gitignored, ~15 GB total)
-│   ├── botsv1_data_set.tgz     ← downloaded archive
-│   ├── default/                ← extracted app config
-│   ├── metadata/
-│   └── var/lib/splunk/botsv1/  ← extracted pre-indexed buckets
+│   └── reset.ps1 / reset.sh    ← nuke + restart; -Full also wipes BOTS volumes
+├── bots-data/                  ← staging area (gitignored — per-version dirs tracked)
+│   ├── botsv1/                 ← BOTSv1 archive + extracted app
+│   ├── botsv2/                 ← BOTSv2 archive + extracted app
+│   └── botsv3/                 ← BOTSv3 archive + extracted app
 ├── challenges/                 ← bundled practice walkthroughs
 │   └── splunk-bots/            ← vendored from github.com/chan2git/splunk-bots
 ├── .gitignore                  ← blocks all huge files
 └── README.md
 ```
 
-After a successful first run, `bots-data/` is a backup — Splunk is
-reading from the volume, not from this folder. You can delete the
-contents (or just the `.tgz`) to reclaim disk, at the cost of having to
-re-download/re-extract before the next `setup -Force` or `reset -Full`.
+After a successful first run, `bots-data/bots<vN>/` is a backup —
+Splunk is reading from the named volumes, not from these folders. You
+can delete their contents (or just the `.tgz` files) to reclaim disk,
+at the cost of having to re-download/re-extract before the next
+`setup -Force` or `reset -Full`.
 
 ## Ports exposed
 

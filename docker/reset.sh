@@ -8,15 +8,15 @@
 #   - splunk-etc-users volume (saved searches, dashboards)
 #
 # What this DOES NOT touch (default):
-#   - splunk-botsv1 volume (the 9 GB BOTSv1 index — kept so we don't
-#     re-copy from bots-data/ for 5 min on every reset)
+#   - splunk-botsv1 / splunk-botsv2 / splunk-botsv3 volumes (the BOTS
+#     indexes — kept so we don't re-copy from bots-data/ on every reset)
 #   - bots-data/ on the host
 #
-# Pass --full to also wipe splunk-botsv1. The next setup.sh run will
-# then re-populate it from bots-data/ (~5 min copy).
+# Pass --full to also wipe the BOTS volumes. The next setup.sh run will
+# then re-populate the requested datasets from bots-data/<vN>/.
 #
 # Usage:
-#   ./docker/reset.sh           # fast reset, keep BOTSv1 volume
+#   ./docker/reset.sh           # fast reset, keep BOTS volumes
 #   ./docker/reset.sh --full    # nuke EVERYTHING, requires re-populate
 #   ./docker/reset.sh --force   # skip confirmation
 
@@ -35,14 +35,17 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 
+BOTS_VOLUMES=(splunklab_splunk-botsv1 splunklab_splunk-botsv2 splunklab_splunk-botsv3)
+STATE_VOLUMES=(splunklab_splunk-var splunklab_splunk-etc-users)
+
 echo
 echo "Splunk Lab — Reset"
 echo "----------------------------------------"
 echo "Compose file : $COMPOSE_FILE"
 if [ "$FULL" -eq 1 ]; then
-    echo "Mode         : FULL (wipes splunk-botsv1 too — next setup re-populates)"
+    echo "Mode         : FULL (wipes BOTS volumes too — next setup re-populates)"
 else
-    echo "Mode         : fast  (keeps splunk-botsv1 — re-uses ~9 GB BOTSv1 data)"
+    echo "Mode         : fast  (keeps BOTS volumes — re-uses indexed data)"
 fi
 echo
 
@@ -58,11 +61,11 @@ echo "==> Stopping container (without --volumes so we control what's wiped)"
 docker compose -f "$COMPOSE_FILE" down --remove-orphans
 
 if [ "$FULL" -eq 1 ]; then
-    echo "==> Removing ALL named volumes (including splunk-botsv1)"
-    docker volume rm splunklab_splunk-var splunklab_splunk-etc-users splunklab_splunk-botsv1 2>/dev/null || true
+    echo "==> Removing ALL named volumes (including BOTS data)"
+    docker volume rm "${STATE_VOLUMES[@]}" "${BOTS_VOLUMES[@]}" 2>/dev/null || true
 else
-    echo "==> Removing only state volumes (keeping splunk-botsv1)"
-    docker volume rm splunklab_splunk-var splunklab_splunk-etc-users 2>/dev/null || true
+    echo "==> Removing only state volumes (keeping BOTS data)"
+    docker volume rm "${STATE_VOLUMES[@]}" 2>/dev/null || true
 fi
 
 echo "==> Starting fresh Splunk container"
@@ -75,7 +78,7 @@ echo "  Username : admin"
 echo "  Password : p@ssw0rd"
 echo
 if [ "$FULL" -eq 1 ]; then
-    echo "BOTSv1 volume was wiped — run ./setup.sh to re-populate (~5 min)."
+    echo "BOTS volumes were wiped — run ./setup.sh [--v1|--v2|--v3|--all] to re-populate."
 else
     echo "Tail boot log: docker logs -f splunk-lab"
 fi

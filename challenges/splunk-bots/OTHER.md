@@ -48,6 +48,19 @@
 
 ---
 
+## IoC reference (ใช้ตรวจ hash / IP / domain ที่เจอใน lab)
+
+### SophosLabs — IoCs
+
+<https://github.com/sophoslabs/IoCs>
+
+- คลัง IoCs จากงานวิจัยมัลแวร์ของ SophosLabs (hashes, IPs, domains, YARA)
+- ไม่ใช่ write-up — ใช้เทียบ artefact ที่เจอใน BOTS ว่าตรงกับแคมเปญที่
+  มีคนรายงานไว้แล้วหรือไม่
+- ค้นได้ตรง ๆ ด้วย GitHub search ภายใน repo
+
+---
+
 ## วิธีใช้ที่แนะนำ
 
 | สถานการณ์ | เปิดอันไหน |
@@ -56,5 +69,6 @@
 | ติดเกิน 15 นาที | `botsv1/` ของ chan2git (folder นี้) |
 | อยากดู approach อื่น | Sabina / Micah |
 | โจทย์เกี่ยวกับ ransomware | JBXSec / HackerHermanos |
+| เจอ hash / IP / domain แปลก ๆ | SophosLabs IoCs |
 
 > ฝึกแบบทำเองก่อนเปิดเฉลย — ได้ผลมากกว่าการอ่านอย่างเดียวเยอะ

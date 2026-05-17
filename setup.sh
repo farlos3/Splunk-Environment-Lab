@@ -1,55 +1,79 @@
 #!/usr/bin/env bash
-# One-shot bootstrap for the Splunk + BOTSv1 lab. Mirrors setup.ps1.
+# One-shot bootstrap for the Splunk + BOTS lab. Mirrors setup.ps1.
 #
 # Why it's not a simple "compose up": Splunk's validatedb refuses to use
-# the BOTSv1 buckets when they live on a Docker Desktop Windows bind
+# the BOTS buckets when they live on a Docker Desktop Windows bind
 # mount ("unusable filesystem" — gRPC-FUSE lacks the locking/mmap
-# semantics Splunk wants). So we stage the dataset in ../bots-data/ on
-# the host, then COPY it into a native Docker named volume that the
+# semantics Splunk wants). So we stage each dataset in ../bots-data/<vN>/
+# on the host, then COPY it into a native Docker named volume that the
 # Splunk container actually reads from.
 #
-# Steps (all idempotent):
-#   1. download BOTSv1 .tgz into bots-data/  (resume-friendly)
-#   2. validate + extract into bots-data/  (skipped if already done)
-#   3. copy bots-data/ into the splunk-botsv1 named volume
+# Steps (all idempotent, per selected dataset):
+#   1. download <vN> .tgz into bots-data/<vN>/  (resume-friendly)
+#   2. validate + extract into bots-data/<vN>/  (skipped if already done)
+#   3. copy bots-data/<vN>/ into the splunk-<vN> named volume
 #      (skipped if the volume already contains a default/ folder)
 #   4. docker compose up -d
 #   5. wait for the container to become healthy
-#   6. verify the botsv1 app + index are visible to Splunk
+#   6. verify each selected app + index is visible to Splunk
 #
 # Usage:
-#   ./setup.sh
-#   ./setup.sh --url https://custom.example/botsv1.tgz
-#   ./setup.sh --skip-download
-#   ./setup.sh --force                # re-extract AND re-populate volume
+#   ./setup.sh                          # default: BOTSv1 only
+#   ./setup.sh --v1 --v2                # multiple datasets
+#   ./setup.sh --all                    # v1, v2, v3
+#   ./setup.sh --v2 --skip-download     # use the .tgz already in bots-data/botsv2/
+#   ./setup.sh --v1 --force             # re-extract AND re-populate v1 volume
+#   ./setup.sh --v1 --url-v1 https://custom.example/botsv1.tgz
+#
+# Practice challenges under challenges/splunk-bots/ are vendored from
+# https://github.com/chan2git/splunk-bots — refer to that upstream for
+# the original walkthroughs.
 
 set -euo pipefail
 
-URL="https://s3.amazonaws.com/botsdataset/botsv1/splunk-pre-indexed/botsv1_data_set.tgz"
+# ---------------------------------------------------------------------------
+# Per-dataset configuration. The HEAD check will catch URLs that have
+# moved; if any of these stop working, override with --url-vN or drop the
+# .tgz manually into bots-data/<vN>/ and pass --skip-download.
+# ---------------------------------------------------------------------------
+URL_V1="https://s3.amazonaws.com/botsdataset/botsv1/splunk-pre-indexed/botsv1_data_set.tgz"
+URL_V2="https://botsdataset.s3.amazonaws.com/botsv2/botsv2_data_set.tgz"
+URL_V3="https://botsdataset.s3.amazonaws.com/botsv3/botsv3_data_set.tgz"
+
+SIZE_V1="~6 GB"
+SIZE_V2="~28 GB"
+SIZE_V3="~3.5 GB"
+
 SKIP_DOWNLOAD=0
 FORCE=0
+declare -A SELECTED
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --url) URL="$2"; shift 2 ;;
+        --v1)  SELECTED[v1]=1; shift ;;
+        --v2)  SELECTED[v2]=1; shift ;;
+        --v3)  SELECTED[v3]=1; shift ;;
+        --all) SELECTED[v1]=1; SELECTED[v2]=1; SELECTED[v3]=1; shift ;;
+        --url-v1) URL_V1="$2"; shift 2 ;;
+        --url-v2) URL_V2="$2"; shift 2 ;;
+        --url-v3) URL_V3="$2"; shift 2 ;;
         --skip-download) SKIP_DOWNLOAD=1; shift ;;
         --force) FORCE=1; shift ;;
+        -h|--help)
+            sed -n '2,30p' "$0"; exit 0 ;;
         *) echo "Unknown argument: $1"; exit 1 ;;
     esac
 done
 
+# Default: BOTSv1 only (preserves prior behavior)
+if [[ ${#SELECTED[@]} -eq 0 ]]; then SELECTED[v1]=1; fi
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="$REPO_ROOT/docker/docker-compose.yml"
-BOTS_DIR="$REPO_ROOT/bots-data"
+BOTS_BASE="$REPO_ROOT/bots-data"
 CONTAINER="splunk-lab"
 SPLUNK_PASS="p@ssw0rd"
-# Named volume created by docker compose. Compose prefixes with the
-# project name ("name: splunklab" at the top of docker-compose.yml).
-VOLUME_NAME="splunklab_splunk-botsv1"
 SPLUNK_UID=41812
-
-# Practice challenges under challenges/splunk-bots/ are vendored into this
-# repo. They originate from https://github.com/chan2git/splunk-bots — refer
-# to that upstream for the original walkthroughs and any updates.
 
 step() { echo; echo "==> $*"; }
 info() { echo "    $*"; }
@@ -67,6 +91,22 @@ file_size() {
     stat -c %s "$1" 2>/dev/null || stat -f %z "$1"
 }
 
+# Resolve per-version metadata. Sets these globals: V_URL, V_SIZE,
+# V_DIR, V_VOLUME, V_APP, V_INDEX.
+load_version() {
+    local v="$1"
+    case "$v" in
+        v1) V_URL="$URL_V1"; V_SIZE="$SIZE_V1" ;;
+        v2) V_URL="$URL_V2"; V_SIZE="$SIZE_V2" ;;
+        v3) V_URL="$URL_V3"; V_SIZE="$SIZE_V3" ;;
+        *) echo "internal error: unknown version '$v'" >&2; exit 1 ;;
+    esac
+    V_DIR="$BOTS_BASE/bots${v}"
+    V_VOLUME="splunklab_splunk-bots${v}"
+    V_APP="bots${v}_data_set"
+    V_INDEX="bots${v}"
+}
+
 # ---------------------------------------------------------------------------
 # Pre-flight
 # ---------------------------------------------------------------------------
@@ -79,42 +119,54 @@ for cmd in docker tar curl awk; do
 done
 info "docker, tar, curl, awk available"
 
+info "datasets selected: ${!SELECTED[*]}"
+
 # ---------------------------------------------------------------------------
-# 1 + 2. Get the dataset extracted on host (staging area)
+# Per-dataset: download → validate → extract → populate volume
 # ---------------------------------------------------------------------------
-if [ -d "$BOTS_DIR/default" ] && [ "$FORCE" -ne 1 ]; then
-    step "BOTSv1 already extracted on host — skipping download/extract"
-    info "  found: $BOTS_DIR/default/"
-    info "  (re-run with --force to overwrite)"
-else
-    if [ "$FORCE" -eq 1 ] && [ -d "$BOTS_DIR/default" ]; then
-        step "Wiping existing bots-data/ contents (--force)"
-        find "$BOTS_DIR" -mindepth 1 -maxdepth 1 \
+
+prepare_host_extract() {
+    # Args: <version-label>
+    # Uses globals from load_version.
+    local v="$1"
+    mkdir -p "$V_DIR"
+
+    if [ -d "$V_DIR/default" ] && [ "$FORCE" -ne 1 ]; then
+        step "[$v] already extracted on host — skipping download/extract"
+        info "  found: $V_DIR/default/"
+        info "  (re-run with --force to overwrite)"
+        return
+    fi
+
+    if [ "$FORCE" -eq 1 ] && [ -d "$V_DIR/default" ]; then
+        step "[$v] wiping existing extracted contents (--force)"
+        find "$V_DIR" -mindepth 1 -maxdepth 1 \
             ! -name '.gitkeep' ! -name 'README.md' ! -name '*.tgz' \
             -exec rm -rf {} +
     fi
 
-    # Find any local .tgz first
-    TGZ="$(find "$BOTS_DIR" -maxdepth 1 -type f \( -name '*.tgz' -o -name '*.tar.gz' \) | head -n 1)"
+    local TGZ
+    TGZ="$(find "$V_DIR" -maxdepth 1 -type f \( -name '*.tgz' -o -name '*.tar.gz' \) | head -n 1)"
 
-    REMOTE_SIZE=""
+    local REMOTE_SIZE=""
     if [ "$SKIP_DOWNLOAD" -ne 1 ]; then
-        step "Querying server for archive metadata"
-        info "$URL"
-        HEAD_OUT="$(curl -sIL --max-time 30 "$URL" || true)"
+        step "[$v] querying server for archive metadata"
+        info "$V_URL"
+        local HEAD_OUT http_code
+        HEAD_OUT="$(curl -sIL --max-time 30 "$V_URL" || true)"
         http_code="$(echo "$HEAD_OUT" | awk '/^HTTP/ {code=$2} END {print code}')"
         REMOTE_SIZE="$(echo "$HEAD_OUT" | tr -d '\r' | awk 'tolower($1)=="content-length:" {print $2}' | tail -n 1)"
 
         if [[ ! "$http_code" =~ ^(200|301|302)$ ]]; then
             cat >&2 <<EOF
 
-ERROR: HEAD request returned HTTP $http_code — URL is dead or unreachable.
+ERROR: [$v] HEAD request returned HTTP $http_code — URL is dead or unreachable.
 
-Splunk has changed the BOTSv1 download URL several times. Please:
-  1. Open https://github.com/splunk/botsv1
+Splunk has changed the BOTS download URLs several times. Please:
+  1. Open https://github.com/splunk/bots${v}
   2. Follow the current Download instructions
-  3. Save the .tgz into:  $BOTS_DIR
-  4. Re-run ./setup.sh
+  3. Save the .tgz into:  $V_DIR
+  4. Re-run ./setup.sh --${v} --skip-download
 EOF
             exit 1
         fi
@@ -124,8 +176,9 @@ EOF
     fi
 
     if [ -n "$TGZ" ]; then
-        step "Found existing archive in bots-data/"
+        step "[$v] found existing archive"
         info "path : $TGZ"
+        local LOCAL_SIZE
         LOCAL_SIZE="$(file_size "$TGZ")"
         info "size : $(human "$LOCAL_SIZE")"
 
@@ -134,26 +187,27 @@ EOF
         elif [ "$LOCAL_SIZE" -eq "$REMOTE_SIZE" ]; then
             info "matches remote size — download not needed"
         elif [ "$LOCAL_SIZE" -lt "$REMOTE_SIZE" ]; then
+            local pct
             pct="$(awk "BEGIN {printf \"%.1f\", $LOCAL_SIZE*100/$REMOTE_SIZE}")"
-            step "Resuming partial download (have ${pct}% of file)"
-            curl -L --fail -C - --progress-bar -o "$TGZ" "$URL"
+            step "[$v] resuming partial download (have ${pct}% of file)"
+            curl -L --fail -C - --progress-bar -o "$TGZ" "$V_URL"
         else
-            echo "WARNING: local file is LARGER than remote — likely corrupt." >&2
-            echo "         Delete bots-data/$(basename "$TGZ") and re-run." >&2
+            echo "WARNING: [$v] local file is LARGER than remote — likely corrupt." >&2
+            echo "         Delete $TGZ and re-run." >&2
             exit 1
         fi
     else
         if [ "$SKIP_DOWNLOAD" -eq 1 ]; then
-            echo "ERROR: no .tgz found in bots-data/ and --skip-download set." >&2
+            echo "ERROR: [$v] no .tgz found in $V_DIR and --skip-download set." >&2
             exit 1
         fi
-        TGZ="$BOTS_DIR/botsv1_data_set.tgz"
-        step "Downloading BOTSv1 (~6 GB)"
+        TGZ="$V_DIR/bots${v}_data_set.tgz"
+        step "[$v] downloading BOTS${v} ($V_SIZE)"
         info "destination: $TGZ"
-        curl -L --fail -C - --progress-bar -o "$TGZ" "$URL"
+        curl -L --fail -C - --progress-bar -o "$TGZ" "$V_URL"
     fi
 
-    step "Validating archive integrity"
+    step "[$v] validating archive integrity"
     if ! tar -tzf "$TGZ" >/dev/null 2>/tmp/tar_check.err; then
         echo "ERROR: '$TGZ' is not a valid gzipped tar." >&2
         sed 's/^/  /' /tmp/tar_check.err >&2
@@ -162,52 +216,64 @@ EOF
     rm -f /tmp/tar_check.err
     info "archive looks good"
 
+    local LOCAL_SIZE
     LOCAL_SIZE="$(file_size "$TGZ")"
-    step "Extracting $(basename "$TGZ") ($(human "$LOCAL_SIZE")) into bots-data/"
-    tar -xzf "$TGZ" -C "$BOTS_DIR" --strip-components 1
+    step "[$v] extracting $(basename "$TGZ") ($(human "$LOCAL_SIZE")) into bots-data/bots${v}/"
+    tar -xzf "$TGZ" -C "$V_DIR" --strip-components 1
 
     for d in default metadata; do
-        if [ ! -d "$BOTS_DIR/$d" ]; then
-            echo "WARNING: expected folder '$d' missing after extraction." >&2
+        if [ ! -d "$V_DIR/$d" ]; then
+            echo "WARNING: [$v] expected folder '$d' missing after extraction." >&2
         fi
     done
-fi
-
-# ---------------------------------------------------------------------------
-# 3. Populate the named volume from bots-data/
-# ---------------------------------------------------------------------------
-volume_has_data() {
-    docker volume inspect "$VOLUME_NAME" >/dev/null 2>&1 || return 1
-    docker run --rm -v "$VOLUME_NAME:/c" alpine test -d /c/default >/dev/null 2>&1
 }
 
-step "Checking BOTSv1 named volume"
-if volume_has_data && [ "$FORCE" -ne 1 ]; then
-    info "$VOLUME_NAME already populated — skipping copy"
-    info "(re-run with --force to repopulate)"
-else
-    info "Splunk can't index the BOTSv1 buckets directly from the Windows bind"
-    info "mount (Docker Desktop's gRPC-FUSE share is rejected by validatedb)."
-    info "We copy into a native Docker volume instead."
+populate_volume() {
+    # Args: <version-label>
+    local v="$1"
 
-    # Stop container if running so the volume isn't held open
+    volume_has_data() {
+        docker volume inspect "$V_VOLUME" >/dev/null 2>&1 || return 1
+        docker run --rm -v "$V_VOLUME:/c" alpine test -d /c/default >/dev/null 2>&1
+    }
+
+    step "[$v] checking named volume $V_VOLUME"
+    if volume_has_data && [ "$FORCE" -ne 1 ]; then
+        info "already populated — skipping copy"
+        info "(re-run with --force to repopulate)"
+        return
+    fi
+
+    info "Splunk can't index BOTS buckets directly from the Windows bind"
+    info "mount (Docker Desktop's gRPC-FUSE share is rejected by validatedb)."
+    info "Copying into a native Docker volume instead."
+
     if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER}\$"; then
         info "stopping $CONTAINER before populating volume"
         docker compose -f "$COMPOSE_FILE" down >/dev/null 2>&1 || true
     fi
 
-    if [ "$FORCE" -eq 1 ] && docker volume inspect "$VOLUME_NAME" >/dev/null 2>&1; then
+    if [ "$FORCE" -eq 1 ] && docker volume inspect "$V_VOLUME" >/dev/null 2>&1; then
         info "wiping volume (--force)"
-        docker volume rm "$VOLUME_NAME" >/dev/null 2>&1 || true
+        docker volume rm "$V_VOLUME" >/dev/null 2>&1 || true
     fi
 
-    step "Copying bots-data/ into $VOLUME_NAME (~5 min for ~9 GB)"
+    step "[$v] copying bots-data/bots${v}/ into $V_VOLUME"
     docker run --rm \
-        -v "$BOTS_DIR:/src:ro" \
-        -v "$VOLUME_NAME:/dst" \
+        -v "$V_DIR:/src:ro" \
+        -v "$V_VOLUME:/dst" \
         alpine sh -c "set -e; cp -a /src/. /dst/ && rm -f /dst/*.tgz && chown -R ${SPLUNK_UID}:${SPLUNK_UID} /dst && du -sh /dst"
     info "volume populated"
-fi
+}
+
+# Iterate in stable order
+for v in v1 v2 v3; do
+    if [[ -n "${SELECTED[$v]:-}" ]]; then
+        load_version "$v"
+        prepare_host_extract "$v"
+        populate_volume "$v"
+    fi
+done
 
 # ---------------------------------------------------------------------------
 # 4. Start Splunk
@@ -235,18 +301,20 @@ if [ "$status" != "healthy" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 6. Verify Splunk loaded the app + index has data
+# 6. Verify selected datasets in Splunk
 # ---------------------------------------------------------------------------
-step "Verifying BOTSv1 in Splunk"
+step "Verifying selected BOTS datasets in Splunk"
 sleep 3
-app_code="$(curl -ks -u "admin:$SPLUNK_PASS" -o /dev/null -w '%{http_code}' \
-    "https://localhost:8089/services/apps/local/botsv1_data_set" || echo 000)"
-info "app  : HTTP $app_code (200 = loaded)"
-
-idx_count="$(curl -ks -u "admin:$SPLUNK_PASS" \
-    "https://localhost:8089/services/data/indexes/botsv1?output_mode=json" 2>/dev/null \
-    | awk -F'"' '/totalEventCount/ {for (i=1;i<=NF;i++) if ($i ~ /totalEventCount/) print $(i+2); exit}')"
-info "index: ${idx_count:-?} events"
+for v in v1 v2 v3; do
+    if [[ -z "${SELECTED[$v]:-}" ]]; then continue; fi
+    load_version "$v"
+    app_code="$(curl -ks -u "admin:$SPLUNK_PASS" -o /dev/null -w '%{http_code}' \
+        "https://localhost:8089/services/apps/local/$V_APP" || echo 000)"
+    idx_count="$(curl -ks -u "admin:$SPLUNK_PASS" \
+        "https://localhost:8089/services/data/indexes/$V_INDEX?output_mode=json" 2>/dev/null \
+        | awk -F'"' '/totalEventCount/ {for (i=1;i<=NF;i++) if ($i ~ /totalEventCount/) print $(i+2); exit}')"
+    info "[$v] app: HTTP $app_code (200 = loaded)   index: ${idx_count:-?} events"
+done
 
 # ---------------------------------------------------------------------------
 # Done
@@ -260,7 +328,9 @@ cat <<EOF
   Username : admin
   Password : $SPLUNK_PASS
 
-Sample search (set time range to 'All time' — data is from Aug 2016):
+Sample search (set time range to 'All time'):
   index=botsv1 earliest=0 | stats count by sourcetype
+  index=botsv2 earliest=0 | stats count by sourcetype
+  index=botsv3 earliest=0 | stats count by sourcetype
 
 EOF

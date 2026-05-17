@@ -1,68 +1,75 @@
-# BOTSv1 dataset goes here
+# BOTS datasets — staging area
 
-This folder is mounted into the Splunk container as
-`/opt/splunk/etc/apps/botsv1`. Splunk treats whatever is in this folder
-as a single app called `botsv1`.
-
-## What to put here
-
-Extract the BOTSv1 archive **so the app's top-level folders land directly
-in this directory** — not nested inside another `botsv1/` folder.
-
-Expected layout after extraction:
+This folder is the host-side staging area for Splunk's **BOTS** (Boss
+of the SOC) datasets. Each version goes into its own subfolder; the
+setup script copies them into per-version Docker named volumes that
+the Splunk container actually reads from.
 
 ```
 bots-data/
-├── default/        ← indexes.conf, props.conf, transforms.conf, ...
+├── botsv1/        ← BOTSv1 archive + extracted app
+├── botsv2/        ← BOTSv2 archive + extracted app
+└── botsv3/        ← BOTSv3 archive + extracted app
+```
+
+Each `bots<vN>/` folder, after extraction, contains the Splunk app
+layout straight from the archive:
+
+```
+bots-data/botsv1/
+├── default/                  ← indexes.conf, props.conf, transforms.conf, ...
 ├── local/
 ├── lookups/
 ├── metadata/
-├── data/           ← pre-indexed Splunk buckets (the heavy bit)
-└── README          ← from Splunk's archive
+├── var/lib/splunk/botsv1/    ← pre-indexed Splunk buckets (the heavy bit)
+└── README, LICENSE, ...
 ```
 
-## How to download
+> The `--strip-components 1` flag in setup drops the top-level
+> `botsv<N>/` folder inside the archive so its contents land directly
+> in `bots-data/botsv<N>/`.
 
-1. Go to <https://github.com/splunk/botsv1>
-2. Follow the **Download** section in its README (currently points to an S3
-   bucket; URL has changed over time, always trust the upstream README).
-3. Once you have the `.tgz`, extract it into this folder:
+## How to populate
 
-   ```powershell
-   # PowerShell
-   tar -xzf .\botsv1_data_set.tgz -C .\bots-data --strip-components 1
-   ```
+Easiest: let `setup.sh` / `setup.ps1` download and extract for you.
 
-   ```bash
-   # bash
-   tar -xzf botsv1_data_set.tgz -C bots-data --strip-components 1
-   ```
+```bash
+./setup.sh --v1               # just BOTSv1 (~6 GB)
+./setup.sh --v1 --v2          # v1 + v2
+./setup.sh --all              # v1 + v2 + v3
+```
 
-   The `--strip-components 1` flag drops the top-level `botsv1/` folder
-   from the archive so its contents land directly in `bots-data/`.
+If the auto-download fails (Splunk has moved BOTS URLs several times),
+grab the archive manually and drop it in the right subfolder:
 
-4. Restart the container so Splunk re-scans apps:
+1. Open <https://github.com/splunk/botsv1> (or `botsv2` / `botsv3`)
+2. Follow the current **Download** section
+3. Save the `.tgz` into `bots-data/botsv<N>/`
+4. Re-run with `--v<N> --skip-download`
 
-   ```powershell
-   docker compose -f docker/docker-compose.yml restart splunk
-   ```
+## How big is each?
 
-## Verifying
-
-After Splunk finishes loading:
-
-- Open <http://localhost:8000>
-- Go to **Apps** → you should see **BOTS Dataset v1** listed
-- In Search, run with time range **All time**:
-
-  ```
-  index=botsv1 | stats count by sourcetype
-  ```
-
-  You should see dozens of sourcetypes (`wineventlog`, `stream:http`,
-  `xmlwineventlog`, `iis`, `suricata`, etc.) with millions of events.
+| Dataset | Compressed | Extracted |
+| --- | --- | --- |
+| BOTSv1 | ~6 GB | ~9 GB |
+| BOTSv2 | ~28 GB | very large — check upstream |
+| BOTSv3 | ~3.5 GB | ~5 GB |
 
 ## Why this isn't in git
 
-The dataset is ~6 GB compressed (~25 GB extracted). `.gitignore` excludes
-everything in this folder except this README and `.gitkeep`.
+The archives and extracted buckets are tens of gigabytes — GitHub
+rejects single files >100 MB. `.gitignore` keeps only this README and
+the empty per-version `.gitkeep` placeholders, so the folder structure
+is preserved without committing data.
+
+## Verifying after setup
+
+Open <http://localhost:8000>, go to **Apps**, and confirm the
+**BOTS Dataset v1 / v2 / v3** apps appear for whichever versions you
+loaded. In Search, with time range **All time**:
+
+```
+index=botsv1 | stats count by sourcetype
+index=botsv2 | stats count by sourcetype
+index=botsv3 | stats count by sourcetype
+```
