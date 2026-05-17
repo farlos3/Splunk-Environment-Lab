@@ -47,8 +47,9 @@ SPLUNK_PASS="p@ssw0rd"
 VOLUME_NAME="splunklab_splunk-botsv1"
 SPLUNK_UID=41812
 
-CHALLENGE_REPO="https://github.com/chan2git/splunk-bots.git"
-CHALLENGE_DIR="$REPO_ROOT/challenges/splunk-bots"
+# Practice challenges under challenges/splunk-bots/ are vendored into this
+# repo. They originate from https://github.com/chan2git/splunk-bots — refer
+# to that upstream for the original walkthroughs and any updates.
 
 step() { echo; echo "==> $*"; }
 info() { echo "    $*"; }
@@ -70,25 +71,13 @@ file_size() {
 # Pre-flight
 # ---------------------------------------------------------------------------
 step "Pre-flight checks"
-for cmd in docker tar curl awk git; do
+for cmd in docker tar curl awk; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
         echo "ERROR: '$cmd' not found on PATH." >&2
         exit 1
     fi
 done
-info "docker, tar, curl, awk, git available"
-
-# ---------------------------------------------------------------------------
-# Clone / update the practice challenge repo (chan2git/splunk-bots)
-# ---------------------------------------------------------------------------
-if [ -d "$CHALLENGE_DIR/.git" ]; then
-    step "Updating practice challenges (challenges/splunk-bots)"
-    git -C "$CHALLENGE_DIR" pull --ff-only 2>&1 | sed 's/^/    /'
-else
-    step "Cloning practice challenges from $CHALLENGE_REPO"
-    mkdir -p "$(dirname "$CHALLENGE_DIR")"
-    git clone --depth 1 "$CHALLENGE_REPO" "$CHALLENGE_DIR"
-fi
+info "docker, tar, curl, awk available"
 
 # ---------------------------------------------------------------------------
 # 1 + 2. Get the dataset extracted on host (staging area)

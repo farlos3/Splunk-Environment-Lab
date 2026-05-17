@@ -100,11 +100,15 @@ boot, no re-copy needed.
 
 ## Practice — BOTSv1 challenges
 
-`setup` automatically clones <https://github.com/chan2git/splunk-bots>
-into `challenges/splunk-bots/` — this is the **primary practice
-resource**. It has completed walkthrough solutions for all three BOTS
-versions (`botsv1/`, `botsv2/`, `botsv3/`) with SPL queries and
-investigation steps.
+`challenges/splunk-bots/` is bundled in this repo as the **primary
+practice resource**. It has completed walkthrough solutions for all
+three BOTS versions (`botsv1/`, `botsv2/`, `botsv3/`) with SPL queries
+and investigation steps.
+
+> **Source / credit:** the contents of `challenges/splunk-bots/` are
+> vendored from <https://github.com/chan2git/splunk-bots>. Check that
+> upstream for the latest revisions or to file issues against the
+> walkthroughs.
 
 > Tip: try answering each official question yourself first using the
 > sample searches below, then check `challenges/splunk-bots/botsv1/` to
@@ -157,7 +161,7 @@ write-ups on Medium and GitHub.
 
 ```
 Splunk-Environment-Lab/
-├── setup.ps1 / setup.sh        ← one-shot bootstrap (clone challenges + download + extract + copy + up)
+├── setup.ps1 / setup.sh        ← one-shot bootstrap (download + extract + copy + up)
 ├── docker/
 │   ├── docker-compose.yml      ← splunk service + named volumes + ports
 │   └── reset.ps1 / reset.sh    ← nuke + restart; -Full also wipes BOTSv1 volume
@@ -166,8 +170,8 @@ Splunk-Environment-Lab/
 │   ├── default/                ← extracted app config
 │   ├── metadata/
 │   └── var/lib/splunk/botsv1/  ← extracted pre-indexed buckets
-├── challenges/                 ← cloned practice repos (gitignored)
-│   └── splunk-bots/            ← chan2git/splunk-bots — main practice resource
+├── challenges/                 ← bundled practice walkthroughs
+│   └── splunk-bots/            ← vendored from github.com/chan2git/splunk-bots
 ├── .gitignore                  ← blocks all huge files
 └── README.md
 ```

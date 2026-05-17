@@ -38,8 +38,10 @@ $splunkPass  = "p@ssw0rd"
 # project name ("name: splunklab" at the top of docker-compose.yml).
 $volumeName    = "splunklab_splunk-botsv1"
 $splunkUid     = 41812
-$challengeRepo = "https://github.com/chan2git/splunk-bots.git"
-$challengeDir  = Join-Path $repoRoot "challenges\splunk-bots"
+
+# Practice challenges under challenges\splunk-bots\ are vendored into this
+# repo. They originate from https://github.com/chan2git/splunk-bots — refer
+# to that upstream for the original walkthroughs and any updates.
 
 function Write-Step($msg) {
     Write-Host ""
@@ -64,26 +66,13 @@ function Test-VolumeHasData {
 # Pre-flight
 # ---------------------------------------------------------------------------
 Write-Step "Pre-flight checks"
-foreach ($cmd in @("docker", "tar", "curl.exe", "git")) {
+foreach ($cmd in @("docker", "tar", "curl.exe")) {
     if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
         Write-Host "ERROR: '$cmd' not found on PATH." -ForegroundColor Red
         exit 1
     }
 }
-Write-Info "docker, tar, curl, git available"
-
-# ---------------------------------------------------------------------------
-# Clone / update the practice challenge repo (chan2git/splunk-bots)
-# ---------------------------------------------------------------------------
-if (Test-Path (Join-Path $challengeDir ".git")) {
-    Write-Step "Updating practice challenges (challenges\splunk-bots)"
-    git -C $challengeDir pull --ff-only 2>&1 | ForEach-Object { "    $_" }
-} else {
-    Write-Step "Cloning practice challenges from $challengeRepo"
-    $parent = Split-Path -Parent $challengeDir
-    if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
-    git clone --depth 1 $challengeRepo $challengeDir
-}
+Write-Info "docker, tar, curl available"
 
 # ---------------------------------------------------------------------------
 # 1 + 2. Get the dataset extracted on host (staging area)
