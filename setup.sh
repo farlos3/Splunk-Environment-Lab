@@ -127,6 +127,18 @@ file_size() {
     stat -c %s "$1" 2>/dev/null || stat -f %z "$1"
 }
 
+# `docker` on Windows is a native .exe — it sees the Unix-form path
+# `/d/foo` that bash hands it and treats it as drive-relative `D:\d\foo`.
+# Convert paths to Windows form before passing them to docker. No-op on
+# Mac, Linux, and WSL (where docker is a Linux binary that understands
+# /d/... just fine).
+to_winpath() {
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*) cygpath -w "$1" ;;
+        *) printf '%s\n' "$1" ;;
+    esac
+}
+
 # Resolve per-version metadata. Sets these globals: V_URL, V_SIZE,
 # V_DIR, V_VOLUME, V_APP, V_INDEX.
 load_version() {
@@ -305,7 +317,7 @@ populate_volume() {
 
     if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER}\$"; then
         info "stopping $CONTAINER before populating volume"
-        docker compose -f "$COMPOSE_FILE" down >/dev/null 2>&1 || true
+        docker compose -f "$(to_winpath "$COMPOSE_FILE")" down >/dev/null 2>&1 || true
     fi
 
     if [ "$FORCE" -eq 1 ] && docker volume inspect "$V_VOLUME" >/dev/null 2>&1; then
@@ -315,7 +327,7 @@ populate_volume() {
 
     step "[$v] copying bots-data/bots${v}/ into $V_VOLUME"
     docker run --rm \
-        -v "$V_DIR:/src:ro" \
+        -v "$(to_winpath "$V_DIR"):/src:ro" \
         -v "$V_VOLUME:/dst" \
         alpine sh -c "set -e; cp -a /src/. /dst/ && rm -f /dst/*.tgz && chown -R ${SPLUNK_UID}:${SPLUNK_UID} /dst && du -sh /dst"
     info "volume populated"
@@ -334,7 +346,7 @@ done
 # 4. Start Splunk
 # ---------------------------------------------------------------------------
 step "Starting Splunk container"
-docker compose -f "$COMPOSE_FILE" up -d
+docker compose -f "$(to_winpath "$COMPOSE_FILE")" up -d
 
 # ---------------------------------------------------------------------------
 # 5. Wait for healthy
