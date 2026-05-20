@@ -46,14 +46,39 @@ SIZE_V3="~3.5 GB"
 
 SKIP_DOWNLOAD=0
 FORCE=0
-declare -A SELECTED
+# macOS ships bash 3.2 which lacks associative arrays. Use plain flags
+# so the same script runs on Mac, Linux, Git Bash, and WSL.
+SEL_V1=0
+SEL_V2=0
+SEL_V3=0
 
-while [[ $# -gt 0 ]]; do
+is_selected() {
     case "$1" in
-        --v1)  SELECTED[v1]=1; shift ;;
-        --v2)  SELECTED[v2]=1; shift ;;
-        --v3)  SELECTED[v3]=1; shift ;;
-        --all) SELECTED[v1]=1; SELECTED[v2]=1; SELECTED[v3]=1; shift ;;
+        v1) [ "$SEL_V1" -eq 1 ] ;;
+        v2) [ "$SEL_V2" -eq 1 ] ;;
+        v3) [ "$SEL_V3" -eq 1 ] ;;
+        *) return 1 ;;
+    esac
+}
+
+selected_list() {
+    local out=""
+    [ "$SEL_V1" -eq 1 ] && out="$out v1"
+    [ "$SEL_V2" -eq 1 ] && out="$out v2"
+    [ "$SEL_V3" -eq 1 ] && out="$out v3"
+    echo "${out# }"
+}
+
+any_selected() {
+    [ "$SEL_V1" -eq 1 ] || [ "$SEL_V2" -eq 1 ] || [ "$SEL_V3" -eq 1 ]
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --v1)  SEL_V1=1; shift ;;
+        --v2)  SEL_V2=1; shift ;;
+        --v3)  SEL_V3=1; shift ;;
+        --all) SEL_V1=1; SEL_V2=1; SEL_V3=1; shift ;;
         --url-v1) URL_V1="$2"; shift 2 ;;
         --url-v2) URL_V2="$2"; shift 2 ;;
         --url-v3) URL_V3="$2"; shift 2 ;;
@@ -66,7 +91,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Default: BOTSv1 only (preserves prior behavior)
-if [[ ${#SELECTED[@]} -eq 0 ]]; then SELECTED[v1]=1; fi
+if ! any_selected; then SEL_V1=1; fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="$REPO_ROOT/docker/docker-compose.yml"
@@ -119,7 +144,7 @@ for cmd in docker tar curl awk; do
 done
 info "docker, tar, curl, awk available"
 
-info "datasets selected: ${!SELECTED[*]}"
+info "datasets selected: $(selected_list)"
 
 # ---------------------------------------------------------------------------
 # Per-dataset: download → validate → extract → populate volume
@@ -268,7 +293,7 @@ populate_volume() {
 
 # Iterate in stable order
 for v in v1 v2 v3; do
-    if [[ -n "${SELECTED[$v]:-}" ]]; then
+    if is_selected "$v"; then
         load_version "$v"
         prepare_host_extract "$v"
         populate_volume "$v"
@@ -306,7 +331,7 @@ fi
 step "Verifying selected BOTS datasets in Splunk"
 sleep 3
 for v in v1 v2 v3; do
-    if [[ -z "${SELECTED[$v]:-}" ]]; then continue; fi
+    if ! is_selected "$v"; then continue; fi
     load_version "$v"
     app_code="$(curl -ks -u "admin:$SPLUNK_PASS" -o /dev/null -w '%{http_code}' \
         "https://localhost:8089/services/apps/local/$V_APP" || echo 000)"
