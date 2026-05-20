@@ -32,6 +32,17 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
+# Windows / Git Bash compatibility
+# ---------------------------------------------------------------------------
+# Git Bash on Windows (MSYS / MSYS2) auto-rewrites Unix-style paths in
+# command arguments to Windows form. That mangles `docker run -v
+# host:/container` mounts because the `:/container` half looks like a
+# path to MSYS. Disabling both knobs is a no-op on Mac, Linux, and WSL
+# but is mandatory for Git Bash.
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL='*'
+
+# ---------------------------------------------------------------------------
 # Per-dataset configuration. The HEAD check will catch URLs that have
 # moved; if any of these stop working, override with --url-vN or drop the
 # .tgz manually into bots-data/<vN>/ and pass --skip-download.
@@ -143,6 +154,25 @@ for cmd in docker tar curl awk; do
     fi
 done
 info "docker, tar, curl, awk available"
+
+# `docker info` is the cheapest call that actually talks to the daemon.
+# A bare `docker --version` only checks the CLI binary and would not
+# catch the common "Docker Desktop not started" case.
+if ! docker info >/dev/null 2>&1; then
+    case "$(uname -s)" in
+        Darwin)  start_hint="Open Docker Desktop from Applications (or: open -a Docker)" ;;
+        Linux)   start_hint="Start the daemon: sudo systemctl start docker" ;;
+        MINGW*|MSYS*|CYGWIN*) start_hint="Launch Docker Desktop from the Start menu" ;;
+        *)       start_hint="Make sure Docker Desktop / dockerd is running" ;;
+    esac
+    cat >&2 <<EOF
+ERROR: Docker daemon is not reachable.
+  $start_hint
+  Then wait until the whale icon stops animating and re-run this script.
+EOF
+    exit 1
+fi
+info "docker daemon reachable"
 
 info "datasets selected: $(selected_list)"
 

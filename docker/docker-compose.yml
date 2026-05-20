@@ -3,6 +3,10 @@ name: splunklab
 services:
   splunk:
     image: splunk/splunk:latest
+    # Splunk publishes amd64 images only. On Apple Silicon (M1/M2/M3/M4)
+    # this forces Docker Desktop to run via Rosetta 2 emulation; on
+    # Windows/Linux x86 it's a no-op.
+    platform: linux/amd64
     container_name: splunk-lab
     hostname: splunk-lab
     environment:
