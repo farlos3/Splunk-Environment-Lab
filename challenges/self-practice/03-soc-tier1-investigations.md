@@ -17,7 +17,7 @@
 
 What is the IP address of the `imreallynotbatman.com` web server?
 
-**Hint:** It's the `dest_ip` that receives the most `stream:http` traffic — web servers attract a lot of inbound requests.
+**Hint:** Asset identification before attacker attribution. A public web server is the most-contacted destination in inbound HTTP — rank `dest_ip` by event volume and the top row should be obvious.
 **SOC angle:** Before chasing the attacker, identify the asset under attack.
 
 ---
@@ -27,12 +27,7 @@ What is the IP address of the `imreallynotbatman.com` web server?
 Is anyone scanning the web server? Find the top external `src_ip` values by
 both event count and distinct path count (`uri_path`).
 
-**Hint:**
-```spl
-sourcetype=stream:http dest_ip=<web_ip>
-| stats count dc(uri_path) as unique_paths by src_ip
-| sort - unique_paths | head 10
-```
+**Hint:** Two metrics per source: raw event count and *path diversity*. A normal user hits a handful of distinct paths; a scanner hits hundreds. You need both `count` and `dc(uri_path)` in the same `stats` call.
 **SOC angle:** Vulnerability scanners request many paths in a short time — high `unique_paths` per source is the giveaway.
 
 ---
@@ -41,11 +36,7 @@ sourcetype=stream:http dest_ip=<web_ip>
 
 For the scanning IP from Q32, inspect `http_user_agent`. Which scanning tool was used?
 
-**Hint:**
-```spl
-sourcetype=stream:http src_ip=<scanner_ip>
-| top http_user_agent
-```
+**Hint:** Off-the-shelf scanners almost always leak their name in the User-Agent. Pivot on the source IP from Q32 and look at the top UA strings.
 **SOC angle:** Scanners usually identify themselves in the User-Agent string (Nikto, Acunetix, sqlmap, OWASP ZAP, ...).
 
 ---
@@ -55,12 +46,7 @@ sourcetype=stream:http src_ip=<scanner_ip>
 Did a brute-force attack hit the login page? Count POST requests to the
 login URL grouped by `src_ip`.
 
-**Hint:**
-```spl
-sourcetype=stream:http http_method=POST uri_path="*login*"
-| stats count by src_ip
-| sort - count
-```
+**Hint:** Brute force = many POSTs to a login URL from one source. Filter on method + path, group by source, and look at whether the count distribution has a clear outlier.
 **SOC angle:** A single IP issuing hundreds of POSTs to a login endpoint in a short window is brute force.
 
 ---
@@ -70,13 +56,7 @@ sourcetype=stream:http http_method=POST uri_path="*login*"
 For the attacker IP from Q34, how many login attempts were made, and over
 how long? Report the start time, end time, and duration in minutes.
 
-**Hint:**
-```spl
-sourcetype=stream:http http_method=POST uri_path="*login*" src_ip=<attacker_ip>
-| stats count earliest(_time) as start latest(_time) as end
-| eval duration_min=round((end-start)/60,1)
-| eval start=strftime(start,"%F %T"), end=strftime(end,"%F %T")
-```
+**Hint:** Three numbers in one `stats`: total count, earliest event time, latest event time. The duration is just `(latest - earliest)` in epoch seconds — divide by 60 for minutes and use `strftime` for the readable start/end.
 **SOC angle:** Always report the start and end of an attack window in any triage note.
 
 ---
@@ -85,13 +65,7 @@ sourcetype=stream:http http_method=POST uri_path="*login*" src_ip=<attacker_ip>
 
 How many distinct passwords did the attacker try?
 
-**Hint:** Look at the `form_data` field on POST requests — it contains
-`passwd=...&...`. Extract the password with `rex`, then `dc(...)` it.
-```spl
-sourcetype=stream:http http_method=POST src_ip=<attacker_ip> uri_path="*login*"
-| rex field=form_data "passwd=(?<pwd>[^&]+)"
-| stats dc(pwd) as unique_passwords
-```
+**Hint:** The submitted credentials ride in `form_data`, URL-encoded as something like `username=...&passwd=...`. Pull the password into its own field with `rex` (capture everything between `passwd=` and the next `&`), then distinct-count.
 **SOC angle:** A wordlist tells you something about the attacker — dictionary attack vs. targeted, English vs. localized, hash-cracked vs. random.
 
 ---
@@ -102,13 +76,7 @@ Which password resulted in a **successful** login? Spotting it requires
 comparing response sizes — most attempts return a "failed" page of a
 consistent size; the successful one will differ.
 
-**Hint:**
-```spl
-sourcetype=stream:http http_method=POST src_ip=<attacker_ip> uri_path="*login*"
-| rex field=form_data "passwd=(?<pwd>[^&]+)"
-| stats count by pwd bytes_out
-| sort bytes_out
-```
+**Hint:** Reuse the `rex` extraction from Q36 to get `pwd`, then look at the response side-channel. `bytes_out` (or `status`) for the failed attempts will cluster around one value; the success is the single row that doesn't fit the cluster.
 **SOC angle:** When you can't see content directly, look for response-size or status-code outliers.
 
 ---
@@ -117,12 +85,7 @@ sourcetype=stream:http http_method=POST src_ip=<attacker_ip> uri_path="*login*"
 
 After successful login, was anything uploaded? Find the file upload request.
 
-**Hint:** Look for POSTs to upload-related paths, or POSTs whose `form_data` contains `multipart` / `Content-Disposition`.
-```spl
-sourcetype=stream:http http_method=POST src_ip=<attacker_ip>
-  (uri_path="*upload*" OR form_data="*Content-Disposition*")
-| table _time src_ip uri_path form_data
-```
+**Hint:** File uploads use `multipart/form-data`, which leaves `Content-Disposition` headers in the body. Constrain to POSTs from the attacker IP after the successful-login timestamp from Q37, and look for either an obvious upload path or that `Content-Disposition` marker in `form_data`.
 **SOC angle:** Web-shell upload is the typical pivot from "logged in" to "owns the server".
 
 ---
@@ -131,13 +94,7 @@ sourcetype=stream:http http_method=POST src_ip=<attacker_ip>
 
 What is the filename used for the defacement (image or HTML page)?
 
-**Hint:** Extract the filename from `form_data` (`filename="..."`).
-```spl
-sourcetype=stream:http http_method=POST src_ip=<attacker_ip>
-| rex field=form_data "filename=\"(?<fname>[^\"]+)\""
-| where isnotnull(fname)
-| table _time fname
-```
+**Hint:** Multipart uploads embed a `filename="..."` token in the body. Same `rex` technique as Q36/Q37 — capture everything between the quotes — then filter to the rows where the field is non-null.
 **SOC angle:** The chosen filename often hints at the threat actor or campaign.
 
 ---
@@ -165,12 +122,7 @@ Summarize the IOCs from this incident:
 
 What is the IP address of `we8105desk`?
 
-**Hint:**
-```spl
-index=botsv1 we8105desk
-| stats values(src_ip) values(dest_ip) by host
-```
-or look at DHCP / Windows logs.
+**Hint:** Free-text search the hostname across the index and see which IP addresses co-occur on those events. `stats values(src_ip) values(dest_ip) by host` collapses it into one row per host. DHCP and Windows logon events also bind host↔IP if you want a second source.
 **SOC angle:** Identify the first infected host — the rest of the investigation hangs on this.
 
 ---
@@ -179,14 +131,7 @@ or look at DHCP / Windows logs.
 
 What is the first suspicious DNS query made by `we8105desk` on 8/24/2016?
 
-**Hint:**
-```spl
-sourcetype=stream:dns src=<we8105_ip>
-| stats earliest(_time) as first_seen count by query
-| sort first_seen
-| head 20
-```
-Look for domains that stand out — unusual TLDs, random-looking labels, long names.
+**Hint:** Pivot on the host's IP from Q41 against `stream:dns`. Group queries by `earliest(_time)` so you get a chronological list, then eyeball the early rows for the one that doesn't fit — random-looking labels, weird TLDs, long names.
 **SOC angle:** Drive-by and phishing landing pages routinely use throwaway domains.
 
 ---
@@ -196,13 +141,7 @@ Look for domains that stand out — unusual TLDs, random-looking labels, long na
 Was an executable or script run on `we8105desk` just before the ransomware
 fired? Look at process-creation events around the infection time.
 
-**Hint:**
-```spl
-index=botsv1 host=we8105desk EventCode=1
-| table _time User ParentImage Image CommandLine
-| sort _time
-```
-Watch for `cscript.exe`, `wscript.exe`, `powershell.exe`, `.tmp`, `.vbs`.
+**Hint:** Walk the host's process-creation events (Sysmon EID 1) in chronological order. The CommandLine and Image fields tell the story. Red flags: scripting hosts (`cscript`/`wscript`/`powershell`), processes launched from `%TEMP%`, anything with `.tmp` or `.vbs` extensions.
 **SOC angle:** Cerber's typical chain: VBScript dropper → `.tmp` payload → encryption binary.
 
 ---
@@ -212,12 +151,7 @@ Watch for `cscript.exe`, `wscript.exe`, `powershell.exe`, `.tmp`, `.vbs`.
 How many Suricata alerts mention Cerber, and which signature fired the
 fewest times?
 
-**Hint:**
-```spl
-index=botsv1 sourcetype=suricata Cerber
-| stats count by alert.signature_id alert.signature
-| sort count | head 5
-```
+**Hint:** Free-text "Cerber" against the Suricata sourcetype, then group by signature ID + signature name. Sorting *ascending* surfaces the rarest signature — the opposite of the usual top-N pattern.
 **SOC angle:** The lowest-firing signature is often the one that confirms a single high-fidelity action (e.g., the C2 callback after encryption).
 
 ---
@@ -227,12 +161,7 @@ index=botsv1 sourcetype=suricata Cerber
 After encryption, Cerber points the user to a payment / decryption portal.
 What domain (often a `.onion` mirror or TOR gateway) is involved?
 
-**Hint:**
-```spl
-sourcetype=stream:dns src=<we8105_ip>
-| search query="*onion*" OR query="*cerber*"
-| stats count by query
-```
+**Hint:** TOR gateways usually carry `onion` somewhere in the hostname; Cerber's family name shows up in its own infrastructure too. Wildcard-search the host's DNS queries for those tokens.
 **SOC angle:** The ransom-note URL itself is a high-value IOC for both detection and threat-intel sharing.
 
 ---
@@ -242,17 +171,7 @@ sourcetype=stream:dns src=<we8105_ip>
 Which file server did `we8105desk` connect to during the outbreak, and how
 many PDFs were encrypted there?
 
-**Hint:**
-```spl
-index=botsv1 host=we8105desk (sourcetype=*smb* OR EventCode IN (5140,5145))
-| stats count by dest_ip ShareName
-| sort - count
-```
-For the PDF count, look for events that show new `.cerber` files written:
-```spl
-index=botsv1 *.pdf.cerber* OR *.cerber*
-| stats dc(filename) by host
-```
+**Hint:** Two separate searches stitched together. (1) SMB share access — look for sourcetypes containing `smb` or Windows EventCodes 5140/5145, group by `dest_ip` + `ShareName` to find the server. (2) Cerber renames encrypted files with a `.cerber` extension — free-text search for that suffix and distinct-count the filenames.
 **SOC angle:** Lateral encryption via SMB shares is the textbook ransomware blast-radius expansion.
 
 ---
@@ -261,16 +180,7 @@ index=botsv1 *.pdf.cerber* OR *.cerber*
 
 Was a USB device inserted into Bob Smith's workstation? If so, what was its name?
 
-**Hint:**
-```spl
-index=botsv1 host=we8105desk
-  (EventCode=43 OR "USBSTOR" OR DeviceClass="*disk*")
-| table _time host TargetObject Image
-```
-Or look at registry writes touching `USBSTOR`:
-```spl
-index=botsv1 host=we8105desk EventCode=12 TargetObject="*USBSTOR*"
-```
+**Hint:** Windows leaves a trail under the `USBSTOR` registry subkey whenever a removable drive is connected. On a host with Sysmon, that shows up as registry events (EID 12/13) where `TargetObject` contains `USBSTOR`. The device name is embedded in the key path.
 **SOC angle:** USB-drop is a classic initial-access technique — always check.
 
 ---
@@ -284,7 +194,7 @@ Construct a timeline of attack stages ordered by time:
 4. Encryption begins
 5. Encryption complete + ransom note dropped
 
-**Hint:** Pull events from `EventCode=1`, `stream:dns`, and `suricata` for the host within the infection window and sort by `_time`.
+**Hint:** You already have the individual data points from Q42–Q46. The deliverable here is *synthesis*: pull host-scoped events from the three sourcetypes that matter (process creation, DNS, IDS), unify them on `_time`, and label each row with the stage it represents.
 **SOC angle:** A clean timeline is what Tier 2 / Incident Response uses to plan containment.
 
 ---
@@ -294,11 +204,7 @@ Construct a timeline of attack stages ordered by time:
 Compute the **dwell time** — minutes between initial compromise and the
 start of file encryption.
 
-**Hint:**
-```spl
-... | stats earliest(_time) as t0 latest(_time) as t1
-| eval dwell_min=round((t1-t0)/60,1)
-```
+**Hint:** Two timestamps you already identified in earlier questions: `t0` = first compromise activity (the suspicious DNS/dropper from Q42–Q43), `t1` = first encryption event (the first `.cerber` write from Q46). The delta in epoch seconds divided by 60 is your answer.
 **SOC angle:** Dwell time is a top SOC KPI — the lower, the better.
 
 ---
