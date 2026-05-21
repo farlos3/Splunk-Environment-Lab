@@ -184,14 +184,14 @@ Watch for unnatural pairs like `winword.exe → cmd.exe` or `outlook.exe → pow
 
 ### Q21
 ```spl
-index=botsv1 sourcetype=suricata | top limit=10 alert.signature
+index="botsv1" sourcetype=suricata event_type=alert | top limit=10 alert.signature
 ```
 
 ---
 
 ### Q22
 ```spl
-index=botsv1 sourcetype=suricata "alert.severity"=1 | stats count
+index="botsv1" sourcetype=suricata event_type=alert alert.severity=1 | stats count
 ```
 
 ---
