@@ -85,8 +85,8 @@ consistent size; the successful one will differ.
 
 What is the filename used for the defacement (image or HTML page)?
 
-**Hint:** Multipart uploads embed a `filename="..."` token in the body. Same `rex` technique as Q36/Q37 — capture everything between the quotes — then filter to the rows where the field is non-null.
-**SOC angle:** The chosen filename often hints at the threat actor or campaign.
+**Hint:** BOTS v1's `stream:http` doesn't capture POST upload bodies, so you can't grep the upload event for `filename=` directly. Instead use **GET-side discovery** — search outbound GETs from the web server's IP (`192.168.250.70`) for image extensions (`*.jpeg`, `*.jpg`, `*.png`, `*.gif`), then pick out the path that doesn't match the legitimate site's images.
+**SOC angle:** The chosen filename often hints at the threat actor or campaign. Lesson: when you can't see the action directly, pivot to the artifact it leaves behind.
 
 ---
 

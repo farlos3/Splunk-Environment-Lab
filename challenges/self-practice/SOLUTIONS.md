@@ -348,15 +348,8 @@ The outlier `bytes_out` row is the success — most failures share one consisten
 
 ### Q39 — Defacement file
 
-⚠️ **Reality check:** BOTS v1's `stream:http` doesn't capture POST bodies, so the multipart `filename=` token from the upload itself isn't searchable. The reliable approach across all BOTS v1 variants is **GET-side discovery** — find the file by observing the web server serve it afterward.
+BOTS v1's `stream:http` doesn't capture POST upload bodies, so the multipart `filename=` token isn't searchable directly. Use **GET-side discovery** — find the file by observing the web server serve it afterward (this is the technique the official walkthrough uses too).
 
-**Diagnostic (run once to see what sourcetypes are available):**
-```spl
-index=botsv1 earliest=0
-| stats count by sourcetype | sort - count
-```
-
-**Option A — GET-side discovery (reliable, used by the official walkthrough):**
 ```spl
 index=botsv1 sourcetype=stream:http src_ip=192.168.250.70 http_method=GET
 | search "*.jpeg" OR "*.jpg" OR "*.png" OR "*.gif"
@@ -364,20 +357,6 @@ index=botsv1 sourcetype=stream:http src_ip=192.168.250.70 http_method=GET
 | sort - count
 ```
 The defaced file is the one being served from the web server that **doesn't match the legitimate site's image inventory**.
-
-**Option B — via FortiGate UTM (only if `fgt_utm` is present in your dataset):**
-```spl
-index=botsv1 sourcetype=fgt_utm filename=*
-| stats values(filename) as files by src_ip dest_ip
-```
-
-**Option C — via stream:http multipart parsing (only if POST bodies are captured):**
-```spl
-index=botsv1 sourcetype=stream:http http_method=POST "filename="
-| rex field=_raw "filename=\"(?<fname>[^\"]+)\""
-| where isnotnull(fname)
-| stats values(fname) by uri_path
-```
 
 **Answer:** `poisonivy-is-coming-for-you-batman.jpeg`. The .exe payload `3791.exe` (MD5 `ec78c938...`) was uploaded alongside it — see the [BOTS v1 official walkthrough Q109](../splunk-bots/botsv1/README.md) for the malware analysis chain.
 
