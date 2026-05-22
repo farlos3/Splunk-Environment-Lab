@@ -303,9 +303,8 @@ index=botsv1 sourcetype=stream:http src_ip=40.80.148.42
 
 ### Q34 — Brute force source
 ```spl
-index=botsv1 sourcetype=stream:http http_method=POST uri_path="*login*"
-  dest_ip=192.168.250.70
-| stats count by src_ip
+index=botsv1 sourcetype=stream:http dest_ip="192.168.250.70" http_method=POST
+| stats count by src_ip, uri_path
 | sort - count
 ```
 **Answer:** `23.22.63.114` (brute-force host — different from the scanner; a later phase).
@@ -314,11 +313,12 @@ index=botsv1 sourcetype=stream:http http_method=POST uri_path="*login*"
 
 ### Q35 — Brute force duration
 ```spl
-index=botsv1 sourcetype=stream:http http_method=POST uri_path="*login*"
-  src_ip=23.22.63.114
-| stats count earliest(_time) as start latest(_time) as end
-| eval duration_min=round((end-start)/60,1)
-| eval start=strftime(start,"%F %T"), end=strftime(end,"%F %T")
+index=botsv1 sourcetype=stream:http dest_ip="192.168.250.70" src_ip="23.22.63.114" uri_path="/joomla/administrator/index.php" http_method=POST
+| stats count min(_time) as start max(_time) as end
+| eval duration_minutes = (end - start) / 60
+| eval start_time = strftime(start, "%y-%m-%d %H:%M:%S")
+| eval end_time = strftime(end, "%y-%m-%d %H:%M:%S")
+| table count start_time end_time duration_minutes
 ```
 **Answer:** Hundreds of attempts within a few minutes.
 
