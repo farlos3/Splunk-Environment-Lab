@@ -346,60 +346,69 @@ The outlier `bytes_out` row is the success — most failures share one consisten
 
 ---
 
-### Q38 — Post-breach file upload
+### Q38 — Post-breach file upload (evidence of)
 
-⚠️ **Common pitfall:** the upload is *not* from the brute-force IP (`23.22.63.114`). Po1s0n1vy used the scanner box (`40.80.148.42`) for the upload — credentials passed between boxes. If you filtered by `src_ip=23.22.63.114` you'll get zero results.
+⚠️ **BOTS v1 reality:** the inbound POST upload event is **not directly visible** in `stream:http` — Splunk Stream's pre-indexed data captures URLs + headers but not POST bodies, so the `Content-Disposition: filename=` token isn't searchable. The realistic Tier 1 approach is to find **evidence that the upload happened**, not the upload event itself.
 
-**Option A — fastest, free-text:**
+**Diagnostic — figure out what's available first:**
 ```spl
-index=botsv1 poisonivy
-| stats count by sourcetype src_ip dest_ip
+index=botsv1 earliest=0
+| stats count by sourcetype | sort - count
 ```
-You'll see `stream:http` and `fgt_utm` matches sourced from `40.80.148.42`.
+Confirms whether your variant includes `fgt_utm`, `suricata`, etc.
 
-**Option B — FortiGate UTM (file transfer captured directly):**
+**Option A — GET-side discovery (works on every BOTS v1 variant):**
+```spl
+index=botsv1 sourcetype=stream:http src_ip=192.168.250.70 http_method=GET
+| stats count by uri_path
+| sort - count
+```
+The defacement file (`poisonivy-is-coming-for-you-batman.jpeg`) shows up as a path that's being **served by the web server**, which only makes sense if it was uploaded earlier. This is exactly the technique the [BOTS v1 official walkthrough Q104](../splunk-bots/botsv1/README.md) uses.
+
+**Option B — Suricata file-transfer alerts (if your dataset has them):**
+```spl
+index=botsv1 sourcetype=suricata alert.signature="*FILE*"
+| stats count by alert.signature src_ip dest_ip
+```
+
+**Option C — FortiGate UTM (only if `fgt_utm` is present per the diagnostic):**
 ```spl
 index=botsv1 sourcetype=fgt_utm filename=*
 | stats count by src_ip dest_ip filename
 | sort - count
 ```
-The `filename` field is directly parsed by the FortiGate add-on — you'll see `poisonivy-is-coming-for-you-batman.jpeg` and `3791.exe` from `40.80.148.42` → `192.168.250.70`.
 
-**Option C — stream:http multipart upload (more "by the book"):**
-```spl
-index=botsv1 sourcetype=stream:http http_method=POST "filename="
-| rex field=_raw "filename=\"(?<uploaded_file>[^\"]+)\""
-| where isnotnull(uploaded_file)
-| table _time src_ip dest_ip uploaded_file uri_path
-```
+> If A returns rows but B and C don't, your dataset variant is the lighter pre-indexed Stream-only build — that's normal. Stick with the GET-side approach.
 
-**Lesson learned:** APT actors split roles across multiple boxes. *Don't anchor on a single attacker IP* during an investigation — pivot on the *action* (the file transfer) and let the IP fall out of the data.
+**Lesson learned:** "Find evidence of an action you can't directly observe" is a recurring Tier 1 problem. Pivot on the **artifact** (a new file being served) rather than the **action** (the upload HTTP POST) — Splunk's pre-indexed datasets routinely have one but not the other.
 
 ---
 
 ### Q39 — Defacement file
 
-Same gotcha as Q38 — upload came from `40.80.148.42`, not the brute-force IP. Use either of the approaches below.
+Same reality as Q38: the upload POST body isn't captured in `stream:http`. The reliable approach across all BOTS v1 variants is GET-side discovery.
 
-**Option A — fastest, via FortiGate UTM:**
+**Option A — GET-side discovery (reliable, used by the official walkthrough):**
+```spl
+index=botsv1 sourcetype=stream:http src_ip=192.168.250.70 http_method=GET
+| search "*.jpeg" OR "*.jpg" OR "*.png" OR "*.gif"
+| stats count by uri_path
+| sort - count
+```
+The defaced file is the one being served from the web server that **doesn't match the legitimate site's image inventory**.
+
+**Option B — via FortiGate UTM (only if `fgt_utm` is in your dataset — check with the diagnostic from Q38):**
 ```spl
 index=botsv1 sourcetype=fgt_utm filename=*
 | stats values(filename) as files by src_ip dest_ip
 ```
 
-**Option B — via stream:http multipart parsing:**
+**Option C — via stream:http multipart parsing (only if POST bodies are captured):**
 ```spl
-index=botsv1 sourcetype=stream:http http_method=POST "filename=" src_ip=40.80.148.42
+index=botsv1 sourcetype=stream:http http_method=POST "filename="
 | rex field=_raw "filename=\"(?<fname>[^\"]+)\""
 | where isnotnull(fname)
 | stats values(fname) by uri_path
-```
-
-**Option C — confirm via the GET side (clients viewing the defaced page):**
-```spl
-index=botsv1 sourcetype=stream:http src_ip=192.168.250.70 http_method=GET
-| search "*.jpeg" OR "*.jpg"
-| stats count by uri_path
 ```
 
 **Answer:** `poisonivy-is-coming-for-you-batman.jpeg`. The .exe payload `3791.exe` (MD5 `ec78c938...`) was uploaded alongside it — see the [BOTS v1 official walkthrough Q109](../splunk-bots/botsv1/README.md) for the malware analysis chain.
