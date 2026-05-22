@@ -85,8 +85,10 @@ consistent size; the successful one will differ.
 
 After successful login, was anything uploaded? Find the file upload request.
 
-**Hint:** File uploads use `multipart/form-data`, which leaves `Content-Disposition` headers in the body. Constrain to POSTs from the attacker IP after the successful-login timestamp from Q37, and look for either an obvious upload path or that `Content-Disposition` marker in `form_data`.
-**SOC angle:** Web-shell upload is the typical pivot from "logged in" to "owns the server".
+**Hint:** File uploads use `multipart/form-data`, which leaves `Content-Disposition` headers in the body containing `filename="..."`.
+⚠️ **Gotcha:** In BOTS v1 the upload does **not** come from the brute-force IP (`23.22.63.114`). The Po1s0n1vy actor used a separate box (the Acunetix scanner IP, `40.80.148.42`) to upload — credentials were just passed between boxes. So `src_ip=23.22.63.114` returns zero. Either drop the IP filter or pivot to the scanner box.
+Alternative angle: BOTS v1 also captures the file transfer in `sourcetype=fgt_utm` (FortiGate UTM) where the `filename` field is directly parsed.
+**SOC angle:** Web-shell / defacement upload is the typical pivot from "logged in" to "owns the server". Lesson: don't anchor too hard on one IP — APT actors split roles across multiple boxes.
 
 ---
 

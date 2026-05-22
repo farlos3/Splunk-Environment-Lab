@@ -326,10 +326,9 @@ index=botsv1 sourcetype=stream:http dest_ip="192.168.250.70" src_ip="23.22.63.11
 
 ### Q36 — Unique passwords
 ```spl
-index=botsv1 sourcetype=stream:http http_method=POST src_ip=23.22.63.114
-  uri_path="*login*"
-| rex field=form_data "passwd=(?<pwd>[^&]+)"
-| stats dc(pwd) as unique_passwords values(pwd) as password_list
+index=botsv1 sourcetype=stream:http dest_ip="192.168.250.70" src_ip="23.22.63.114" uri_path="/joomla/administrator/index.php" http_method=POST
+| rex field=form_data "passwd=(?<password>[^&]+)"
+| stats dc(password) as unique_passwords
 ```
 **Answer:** ~400+ unique passwords (close to the attempt count — each password tried once = classic dictionary attack).
 
@@ -337,11 +336,10 @@ index=botsv1 sourcetype=stream:http http_method=POST src_ip=23.22.63.114
 
 ### Q37 — Successful password
 ```spl
-index=botsv1 sourcetype=stream:http http_method=POST src_ip=23.22.63.114
-  uri_path="*login*"
-| rex field=form_data "passwd=(?<pwd>[^&]+)"
-| stats count by pwd bytes_out
-| sort bytes_out
+index=botsv1 sourcetype=stream:http dest_ip="192.168.250.70" src_ip="23.22.63.114" uri_path="/joomla/administrator/index.php" http_method=POST
+| rex field=form_data "passwd=(?<password>[^&]+)"
+| stats count by password, status, bytes_out
+| sort - bytes_out
 ```
 The outlier `bytes_out` row is the success — most failures share one consistent response size.
 **Answer:** `batman` (the admin password).
@@ -349,24 +347,62 @@ The outlier `bytes_out` row is the success — most failures share one consisten
 ---
 
 ### Q38 — Post-breach file upload
+
+⚠️ **Common pitfall:** the upload is *not* from the brute-force IP (`23.22.63.114`). Po1s0n1vy used the scanner box (`40.80.148.42`) for the upload — credentials passed between boxes. If you filtered by `src_ip=23.22.63.114` you'll get zero results.
+
+**Option A — fastest, free-text:**
 ```spl
-index=botsv1 sourcetype=stream:http http_method=POST
-  src_ip=23.22.63.114
-  (uri_path="*upload*" OR form_data="*filename=*")
-| table _time uri_path form_data
+index=botsv1 poisonivy
+| stats count by sourcetype src_ip dest_ip
 ```
-You will see POSTs to the Joomla admin upload endpoint.
+You'll see `stream:http` and `fgt_utm` matches sourced from `40.80.148.42`.
+
+**Option B — FortiGate UTM (file transfer captured directly):**
+```spl
+index=botsv1 sourcetype=fgt_utm filename=*
+| stats count by src_ip dest_ip filename
+| sort - count
+```
+The `filename` field is directly parsed by the FortiGate add-on — you'll see `poisonivy-is-coming-for-you-batman.jpeg` and `3791.exe` from `40.80.148.42` → `192.168.250.70`.
+
+**Option C — stream:http multipart upload (more "by the book"):**
+```spl
+index=botsv1 sourcetype=stream:http http_method=POST "filename="
+| rex field=_raw "filename=\"(?<uploaded_file>[^\"]+)\""
+| where isnotnull(uploaded_file)
+| table _time src_ip dest_ip uploaded_file uri_path
+```
+
+**Lesson learned:** APT actors split roles across multiple boxes. *Don't anchor on a single attacker IP* during an investigation — pivot on the *action* (the file transfer) and let the IP fall out of the data.
 
 ---
 
 ### Q39 — Defacement file
+
+Same gotcha as Q38 — upload came from `40.80.148.42`, not the brute-force IP. Use either of the approaches below.
+
+**Option A — fastest, via FortiGate UTM:**
 ```spl
-index=botsv1 sourcetype=stream:http http_method=POST src_ip=23.22.63.114
-| rex field=form_data "filename=\"(?<fname>[^\"]+)\""
+index=botsv1 sourcetype=fgt_utm filename=*
+| stats values(filename) as files by src_ip dest_ip
+```
+
+**Option B — via stream:http multipart parsing:**
+```spl
+index=botsv1 sourcetype=stream:http http_method=POST "filename=" src_ip=40.80.148.42
+| rex field=_raw "filename=\"(?<fname>[^\"]+)\""
 | where isnotnull(fname)
 | stats values(fname) by uri_path
 ```
-**Answer:** `poisonivy-is-coming-for-you-batman.jpeg`.
+
+**Option C — confirm via the GET side (clients viewing the defaced page):**
+```spl
+index=botsv1 sourcetype=stream:http src_ip=192.168.250.70 http_method=GET
+| search "*.jpeg" OR "*.jpg"
+| stats count by uri_path
+```
+
+**Answer:** `poisonivy-is-coming-for-you-batman.jpeg`. The .exe payload `3791.exe` (MD5 `ec78c938...`) was uploaded alongside it — see the [BOTS v1 official walkthrough Q109](../splunk-bots/botsv1/README.md) for the malware analysis chain.
 
 ---
 
@@ -375,9 +411,9 @@ index=botsv1 sourcetype=stream:http http_method=POST src_ip=23.22.63.114
 | IOC type | Value |
 |---|---|
 | Victim IP | `192.168.250.70` (imreallynotbatman.com) |
-| Scanner IP | `40.80.148.42` |
+| Scanner IP / Uploader IP | `40.80.148.42` (recon **and** post-breach upload of JPEG + .exe) |
 | Scanner tool | Acunetix WVS |
-| Brute force IP | `23.22.63.114` |
+| Brute force IP | `23.22.63.114` (cracked password only — did not upload) |
 | Targeted username | `admin` |
 | Successful password | `batman` |
 | Defacement file | `poisonivy-is-coming-for-you-batman.jpeg` |
