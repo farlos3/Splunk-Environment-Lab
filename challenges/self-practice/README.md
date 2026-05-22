@@ -1,20 +1,21 @@
-# Self-Practice: Splunk + SOC Tier 1
+# Self-Practice: Splunk + SOC Tier 1 + Enterprise Security
 
-A set of **50 hands-on exercises** for practicing SPL (Splunk Search Processing
-Language) and core SOC Tier 1 analyst skills, progressing from beginner to
-intermediate. All exercises use the **BOTS v1** dataset (the default loaded
-by `setup.sh`).
+A set of **60 hands-on exercises** for practicing SPL (Splunk Search Processing
+Language), core SOC Tier 1 analyst skills, and the Splunk Enterprise Security
+workflow, progressing from beginner to advanced. All exercises use the
+**BOTS v1** dataset (the default loaded by `setup.sh`).
 
 ---
 
 ## Learning Objectives
 
-After completing all 50 exercises, you should be able to:
+After completing all 60 exercises, you should be able to:
 - Write SPL to search, filter, aggregate, and visualize events fluently
 - Read logs from the key security sourcetypes — Windows, Sysmon, Suricata IDS, DNS, web
 - Answer SOC Tier 1 triage questions (Who? What? When? Where? How?)
 - Build a basic attack timeline and identify Indicators of Compromise (IOCs)
 - Draft a short incident-report summary from your search findings
+- Pivot to the **Splunk Enterprise Security** workflow: CIM data models, correlation searches, notable events, Risk-Based Alerting (RBA), and asset/identity enrichment
 
 ---
 
@@ -25,6 +26,7 @@ After completing all 50 exercises, you should be able to:
 | [01-splunk-fundamentals.md](01-splunk-fundamentals.md) | Beginner | Q1–Q15 | SPL syntax: search, stats, top, table, eval, rex |
 | [02-security-log-analysis.md](02-security-log-analysis.md) | Beginner–Intermediate | Q16–Q30 | Windows / Sysmon / Suricata / DNS / web log reading |
 | [03-soc-tier1-investigations.md](03-soc-tier1-investigations.md) | Intermediate | Q31–Q50 | Brute force, web breach, ransomware, IOCs, timeline |
+| [04-enterprise-security.md](04-enterprise-security.md) | Advanced | Q51–Q60 | CIM data models, correlation searches, notable events, RBA, asset & identity |
 | [SOLUTIONS.md](SOLUTIONS.md) | — | — | Reference answers with SPL and explanations |
 
 ---
@@ -34,6 +36,7 @@ After completing all 50 exercises, you should be able to:
 1. The lab is running — http://localhost:8000 reachable (admin / `p@ssw0rd`)
 2. The **BOTS v1** dataset is loaded — quick check: `index=botsv1 | head 1` returns events
 3. You know how to set the **time picker** in the Splunk Web UI
+4. **Section 4 only:** install either the **Splunk Common Information Model** app (free, lightweight path) **or** the full **Splunk Enterprise Security** trial. See [04-enterprise-security.md](04-enterprise-security.md) for setup details.
 
 ---
 
@@ -50,6 +53,7 @@ contains the events you need — keep searches fast and focused on practice:
 | **Section 2: Q27–Q30** (PowerShell, registry, network conns) | `8/24/2016 00:00:00` → `8/25/2016 00:00:00` | Ransomware day — Sysmon-rich activity |
 | **Scenario A — Web defacement** (Q31–Q40) | `8/10/2016 00:00:00` → `8/12/2016 00:00:00` | Covers full attack chain |
 | **Scenario B — Ransomware** (Q41–Q50) | `8/24/2016 00:00:00` → `8/25/2016 00:00:00` | The Cerber infection window |
+| **Section 4 — ES workflow** (Q51–Q60) | Same as Scenarios A/B above (per question) | Re-uses Section 3's attack windows |
 
 You can either set the time picker manually (Date Range → Between) or
 inline it in SPL:

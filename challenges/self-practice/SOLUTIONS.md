@@ -14,6 +14,7 @@
 > | Section 2 Q27–Q30 | `8/24/2016 00:00:00` → `8/25/2016 00:00:00` |
 > | Scenario A (Q31–Q40) | `8/10/2016 00:00:00` → `8/12/2016 00:00:00` |
 > | Scenario B (Q41–Q50) | `8/24/2016 00:00:00` → `8/25/2016 00:00:00` |
+> | Section 4 (Q51–Q60)  | Per question — Scenario A or B window |
 
 ---
 
@@ -533,6 +534,197 @@ IOCs delivered to Tier 2:
 
 ---
 
+# Section 4 — Enterprise Security Workflow
+
+> Prerequisite: CIM app installed (lightweight path) or ES trial installed (full path). See [04-enterprise-security.md](04-enterprise-security.md) for setup. Q53, Q58–Q60 also assume you've created `index=notable` and `index=risk` under *Settings → Indexes*.
+
+### Q51
+```spl
+| from datamodel:"Authentication"
+| search action="failure"
+| stats count by user
+| sort - count | head 10
+```
+On BOTS v1 during Scenario A you should see `administrator` near the top — the brute-force target on `imreallynotbatman.com`. If you see zero rows, the Windows TA isn't tagging events into the Authentication DM — fall back to:
+```spl
+index=botsv1 sourcetype=WinEventLog:Security EventCode=4625
+| stats count by Account_Name | sort - count | head 10
+```
+and then ask yourself: "what's missing for CIM to recognize this?"
+
+---
+
+### Q52
+```spl
+| tstats summariesonly=t count
+    FROM datamodel=Authentication
+    WHERE Authentication.action="failure"
+    BY Authentication.user
+| rename Authentication.user as user
+| sort - count | head 10
+```
+Same answer as Q51, runs in ~milliseconds against the accelerated DM instead of seconds. The risk of `summariesonly=t`: if acceleration is paused or behind, you silently get an *incomplete* answer with no warning. Set `summariesonly=f` when you're unsure.
+
+---
+
+### Q53
+```spl
+| tstats summariesonly=t sum(All_Traffic.bytes_out) as bytes_out
+    FROM datamodel=Network_Traffic
+    WHERE All_Traffic.dest_ip="192.168.250.70"
+    BY All_Traffic.src
+| rename All_Traffic.src as src
+| sort - bytes_out | head 10
+```
+The attacker IP from Section 3 (`23.22.63.114`) should dominate. If `Network_Traffic` returns nothing, BOTS v1's `stream:ip` isn't CIM-tagged — use the raw fallback:
+```spl
+index=botsv1 sourcetype=stream:ip dest_ip="192.168.250.70"
+| stats sum(bytes_out) as bytes_out by src_ip
+| sort - bytes_out | head 10
+```
+
+---
+
+### Q54
+```spl
+index=botsv1 sourcetype=stream:http
+| eval is_sqli = if(match(uri, "(?i)(union|select|0x|%27|--)"), 1, 0)
+| stats count, dc(uri_path) as unique_paths, sum(is_sqli) as sqli_hits
+        by src_ip dest_ip
+| where unique_paths >= 200 OR sqli_hits >= 5
+| rename src_ip as src, dest_ip as dest
+| eval signature = case(sqli_hits >= 5, "SQL Injection Probe",
+                        unique_paths >= 200, "Web Scanner Activity",
+                        true(), "Suspicious Web Activity"),
+       severity  = if(sqli_hits >= 5, "high", "medium")
+| table _time src dest signature severity count unique_paths sqli_hits
+```
+Expected hit: `23.22.63.114` → `192.168.250.70` with `signature="Web Scanner Activity"` (Acunetix, hundreds of paths). Tune thresholds based on what you saw in Q32 — every environment is different.
+
+---
+
+### Q55
+```spl
+<Q54 search>
+| eval rule_name        = signature,
+       rule_id          = case(sqli_hits >= 5, "WEB-SQLI-001",
+                               true(),         "WEB-SCAN-001"),
+       rule_description = "Self-practice Section 4 - web attack detection"
+| collect index=notable
+```
+Verify:
+```spl
+index=notable rule_id IN ("WEB-SQLI-001", "WEB-SCAN-001")
+| table _time src dest rule_name rule_id severity unique_paths sqli_hits
+```
+`| collect` runs as a write — re-running it appends duplicate rows. In production you'd schedule the search once with a defined cron and let ES handle de-duplication via the throttle window.
+
+---
+
+### Q56
+```spl
+index=notable
+| stats earliest(_time) as first_seen,
+        latest(_time)   as last_seen,
+        count,
+        latest(severity) as severity
+    by src signature
+| convert ctime(first_seen) ctime(last_seen)
+| sort - count
+```
+This is the SPL behind ES's *Incident Review* page — one row per unique notable group, count = how often it fired.
+
+---
+
+### Q57
+```spl
+index=notable
+| bin span=1h _time as window
+| stats min(_time) as first_event, count by window src signature severity
+| stats earliest(first_event) as first_seen,
+        latest(first_event)   as last_seen,
+        sum(count) as total_events,
+        count as throttled_groups
+    by src signature severity
+| convert ctime(first_seen) ctime(last_seen)
+| sort - throttled_groups
+```
+`throttled_groups` ≈ how many independent 1-hour campaigns the attacker ran. ES's "Window duration" on a correlation search does the same thing with one config field.
+
+---
+
+### Q58
+Drive-by domain hit:
+```spl
+index=botsv1 sourcetype=stream:http site="*solidaritedeproximite.org*"
+| eval risk_object      = host,
+       risk_object_type = "system",
+       risk_score       = 30,
+       risk_message     = "HTTP contact to known drive-by domain solidaritedeproximite.org",
+       source_rule      = "Cerber - Drive-by Domain"
+| table _time risk_object risk_object_type risk_score risk_message source_rule
+| collect index=risk
+```
+Suricata TROJAN alerts:
+```spl
+index=botsv1 sourcetype=suricata alert.signature="*ET TROJAN*Cerber*"
+| eval risk_object      = host,
+       risk_object_type = "system",
+       risk_score       = 60,
+       risk_message     = "Suricata ET TROJAN signature: " . 'alert.signature',
+       source_rule      = "Cerber - Suricata IDS"
+| table _time risk_object risk_object_type risk_score risk_message source_rule
+| collect index=risk
+```
+Both should target `host=we8105desk`. Verify:
+```spl
+index=risk | stats sum(risk_score) by risk_object source_rule
+```
+
+---
+
+### Q59
+```spl
+index=risk
+| stats sum(risk_score)       as total_risk,
+        dc(source_rule)       as distinct_rules,
+        values(source_rule)   as rules_fired,
+        latest(_time)         as last_seen,
+        values(risk_message)  as risk_details
+    by risk_object risk_object_type
+| where total_risk >= 80 AND distinct_rules >= 2
+| convert ctime(last_seen)
+| sort - total_risk
+```
+After Q58, `we8105desk` should appear with `total_risk = 90` (30 + 60) and `distinct_rules = 2` — a single high-confidence "ransomware on we8105desk" incident instead of dozens of noisy single-signal alerts. *This is the whole point of RBA.*
+
+---
+
+### Q60
+```csv
+host,ip,criticality,owner,business_unit
+imreallynotbatman.com,192.168.250.70,critical,batman,marketing
+we8105desk,192.168.250.100,medium,bob.smith,sales
+we9041srv,192.168.250.20,high,file-share,sales
+```
+Upload as `assets.csv` under *Settings → Lookups → Lookup table files*, define `assets_lookup`, then:
+```spl
+index=notable
+| lookup assets_lookup host AS dest OUTPUT criticality owner business_unit
+| stats earliest(_time) as first_seen,
+        latest(_time)   as last_seen,
+        count,
+        values(criticality)   as criticality,
+        values(owner)         as owner,
+        values(business_unit) as business_unit
+    by src signature
+| convert ctime(first_seen) ctime(last_seen)
+| sort - count
+```
+Now an analyst sees not just `dest=192.168.250.70` but `criticality=critical, business_unit=marketing` — which is what drives triage priority. ES's Asset & Identity Framework just does this automatically via two pre-shipped lookups (`asset_lookup_by_str`, `identity_lookup_expanded`).
+
+---
+
 # Tips For Continued Practice
 
 1. **Don't stop at one answer** — rewrite each SPL 2–3 different ways and compare
@@ -540,5 +732,6 @@ IOCs delivered to Tier 2:
 3. **Try BOTS v2 and v3** — `./setup.sh --v2` or `--v3` for fresh scenarios
 4. **Convert your best queries into dashboards** — save each as a panel
 5. **Write a real alert** — schedule a search that triggers when, for example, 4625 fires more than 10 times per minute from a single IP
+6. **Schedule your Section 4 detections** — turn each `| collect` query into a saved search with a cron and let `index=notable` / `index=risk` build up over multiple days; then re-run Q56–Q57 and Q59 to see real triage data
 
 Happy hunting.

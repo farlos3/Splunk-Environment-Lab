@@ -103,6 +103,14 @@ dist/
 build/
 
 # -----------------------------------------------------------------------------
+# Proprietary workshop materials — Splunk-provided PDFs, not for redistribution.
+# The exercises in challenges/2026 Splunk BOTS Training/ reference these
+# decks but the decks themselves stay out of git.
+# -----------------------------------------------------------------------------
+challenges/2026 Splunk BOTS Training/Enterprise Security 8.3 Hands-On Lab Gude.pdf
+challenges/2026 Splunk BOTS Training/MD101_For BOTS_Hands-On_Workshop.pdf
+
+# -----------------------------------------------------------------------------
 # OS junk
 # -----------------------------------------------------------------------------
 .DS_Store
