@@ -81,22 +81,6 @@ consistent size; the successful one will differ.
 
 ---
 
-### Q38 — Post-breach file upload (evidence of)
-
-After successful login, was anything uploaded? Find evidence of the file upload.
-
-⚠️ **Reality check about BOTS v1:** the *inbound upload request itself* is usually **not visible** in this dataset — Splunk Stream's pre-indexed `stream:http` typically captures URLs + headers but not POST bodies, so the multipart `filename=` token isn't searchable. The realistic Tier 1 approach is to find **evidence that the upload happened** rather than the upload event itself.
-
-**Two angles that actually work on BOTS v1:**
-
-1. **GET-side discovery** — after the upload, the file is hosted on the web server. Clients (and you, browsing) request it via HTTP GET. Search outbound responses from the web server's IP (`192.168.250.70`) for unusual file names. This is exactly how the official BOTS v1 walkthrough Q104 finds the defacement file.
-
-2. **FortiGate UTM file transfers** — *if* your BOTS v1 variant includes `sourcetype=fgt_utm`, the firewall's UTM module parses the `filename` field on file transfers directly. (Run `index=botsv1 earliest=0 | stats count by sourcetype` to confirm whether it's present in your dataset.)
-
-**SOC angle:** "Find evidence of an action you can't directly observe" is a recurring Tier 1 problem. The lesson: pivot on the **artifact** (a new file being served, a hash showing up in EDR) rather than the **action** (the upload HTTP request).
-
----
-
 ### Q39 — Defacement file
 
 What is the filename used for the defacement (image or HTML page)?

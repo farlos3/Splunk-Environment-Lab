@@ -346,47 +346,15 @@ The outlier `bytes_out` row is the success — most failures share one consisten
 
 ---
 
-### Q38 — Post-breach file upload (evidence of)
+### Q39 — Defacement file
 
-⚠️ **BOTS v1 reality:** the inbound POST upload event is **not directly visible** in `stream:http` — Splunk Stream's pre-indexed data captures URLs + headers but not POST bodies, so the `Content-Disposition: filename=` token isn't searchable. The realistic Tier 1 approach is to find **evidence that the upload happened**, not the upload event itself.
+⚠️ **Reality check:** BOTS v1's `stream:http` doesn't capture POST bodies, so the multipart `filename=` token from the upload itself isn't searchable. The reliable approach across all BOTS v1 variants is **GET-side discovery** — find the file by observing the web server serve it afterward.
 
-**Diagnostic — figure out what's available first:**
+**Diagnostic (run once to see what sourcetypes are available):**
 ```spl
 index=botsv1 earliest=0
 | stats count by sourcetype | sort - count
 ```
-Confirms whether your variant includes `fgt_utm`, `suricata`, etc.
-
-**Option A — GET-side discovery (works on every BOTS v1 variant):**
-```spl
-index=botsv1 sourcetype=stream:http src_ip=192.168.250.70 http_method=GET
-| stats count by uri_path
-| sort - count
-```
-The defacement file (`poisonivy-is-coming-for-you-batman.jpeg`) shows up as a path that's being **served by the web server**, which only makes sense if it was uploaded earlier. This is exactly the technique the [BOTS v1 official walkthrough Q104](../splunk-bots/botsv1/README.md) uses.
-
-**Option B — Suricata file-transfer alerts (if your dataset has them):**
-```spl
-index=botsv1 sourcetype=suricata alert.signature="*FILE*"
-| stats count by alert.signature src_ip dest_ip
-```
-
-**Option C — FortiGate UTM (only if `fgt_utm` is present per the diagnostic):**
-```spl
-index=botsv1 sourcetype=fgt_utm filename=*
-| stats count by src_ip dest_ip filename
-| sort - count
-```
-
-> If A returns rows but B and C don't, your dataset variant is the lighter pre-indexed Stream-only build — that's normal. Stick with the GET-side approach.
-
-**Lesson learned:** "Find evidence of an action you can't directly observe" is a recurring Tier 1 problem. Pivot on the **artifact** (a new file being served) rather than the **action** (the upload HTTP POST) — Splunk's pre-indexed datasets routinely have one but not the other.
-
----
-
-### Q39 — Defacement file
-
-Same reality as Q38: the upload POST body isn't captured in `stream:http`. The reliable approach across all BOTS v1 variants is GET-side discovery.
 
 **Option A — GET-side discovery (reliable, used by the official walkthrough):**
 ```spl
@@ -397,7 +365,7 @@ index=botsv1 sourcetype=stream:http src_ip=192.168.250.70 http_method=GET
 ```
 The defaced file is the one being served from the web server that **doesn't match the legitimate site's image inventory**.
 
-**Option B — via FortiGate UTM (only if `fgt_utm` is in your dataset — check with the diagnostic from Q38):**
+**Option B — via FortiGate UTM (only if `fgt_utm` is present in your dataset):**
 ```spl
 index=botsv1 sourcetype=fgt_utm filename=*
 | stats values(filename) as files by src_ip dest_ip
