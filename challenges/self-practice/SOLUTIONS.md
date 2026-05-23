@@ -399,13 +399,32 @@ Every successful logon event carries the originating host's IP in `Source_Networ
 ---
 
 ### Q42 — First suspicious DNS
+
+⚠️ **Splunk Stream quirk — use `query{}`, not `query` or `hostname{}`:**
+In `stream:dns` events, the queried domain is stored in a **multivalue** field called `query{}` (curly braces literally part of the field name — Splunk's marker for a JSON-array source). Two common pitfalls:
+- `query` (no braces) often returns nothing — that exact field name isn't extracted on these events
+- `hostname{}` is *sometimes* populated but sometimes empty — grouping by it silently hides early events (you'll miss the real Patient Zero domain by a few seconds)
+
+Always pivot on `query{}` for DNS triage on this dataset:
+
 ```spl
-index=botsv1 sourcetype=stream:dns src=192.168.250.100
-| stats earliest(_time) as first_seen count by query
+index=botsv1 sourcetype=stream:dns src_ip="192.168.250.100" "query{}"="*"
+| stats earliest(_time) as first_seen count by "query{}"
+| eval first_seen=strftime(first_seen, "%Y-%m-%d %H:%M:%S")
 | sort first_seen
-| head 20
+| table first_seen, "query{}", count
 ```
-**Answer:** `solidaritedeproximite.org` (the typical drive-by landing for the Cerber dropper).
+
+Scan the rows around **2016-08-24 16:48** — two suspicious domains appear within seconds of each other:
+
+| Time | Domain | Role |
+|---|---|---|
+| 16:48:12 | `solidaritedeproximite.org` | **Real Patient Zero** — the drive-by landing page (French-looking long name) |
+| 16:48:16 | `dedie73.olfsoft.net` | Secondary callback — domain Cerber uses for connectivity checks |
+
+**Answer:** `solidaritedeproximite.org` (the drive-by landing for the Cerber dropper; resolves a few seconds *before* the `olfsoft.net` callback, which is why the field choice matters — `hostname{}`-based grouping skips this event).
+
+**Lesson:** when triaging DNS in BOTS v1 / `stream:dns`, always use `query{}`. The earliest entry — by seconds — is usually the one you actually want.
 
 ---
 
