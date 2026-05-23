@@ -387,7 +387,7 @@ A free-text search for `we8105desk` returns noisy hits — every host in the net
 
 ```spl
 index=botsv1 sourcetype="WinEventLog:Security" EventCode=4624 "we8105desk"
-| stats count by ComputerName, Source_Network_Address
+| stats count by ComputerName,Workstation_Name, Source_Network_Address, EventCode
 ```
 
 Every successful logon event carries the originating host's IP in `Source_Network_Address`. Filtering out the special values `-` (local logon) and `::1` (loopback) leaves the real network address used by `we8105desk`.
