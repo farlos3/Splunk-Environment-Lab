@@ -386,9 +386,8 @@ The defaced file is the one being served from the web server that **doesn't matc
 A free-text search for `we8105desk` returns noisy hits — every host in the network broadcasts and queries this hostname via DNS / NetBIOS, so the resulting IP set is mixed and hard to attribute. For a clean answer, pivot to a log source that **directly binds hostname → IP**: Windows Security logons (Event 4624).
 
 ```spl
-index=botsv1 sourcetype="WinEventLog:Security" EventCode=4624 we8105desk
+index=botsv1 sourcetype="WinEventLog:Security" EventCode=4624 "we8105desk"
 | stats count by ComputerName, Source_Network_Address
-| where Source_Network_Address!="-" AND Source_Network_Address!="::1"
 ```
 
 Every successful logon event carries the originating host's IP in `Source_Network_Address`. Filtering out the special values `-` (local logon) and `::1` (loopback) leaves the real network address used by `we8105desk`.
