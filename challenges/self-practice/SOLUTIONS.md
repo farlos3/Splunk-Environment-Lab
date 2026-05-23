@@ -382,12 +382,20 @@ The defaced file is the one being served from the web server that **doesn't matc
 > **Time picker:** `8/24/2016 00:00:00` → `8/25/2016 00:00:00`
 
 ### Q41 — Patient zero IP
+
+A free-text search for `we8105desk` returns noisy hits — every host in the network broadcasts and queries this hostname via DNS / NetBIOS, so the resulting IP set is mixed and hard to attribute. For a clean answer, pivot to a log source that **directly binds hostname → IP**: Windows Security logons (Event 4624).
+
 ```spl
-index=botsv1 host=we8105desk
-| stats values(src) values(src_ip) values(dest_ip) by host
+index=botsv1 sourcetype="WinEventLog:Security" EventCode=4624 we8105desk
+| stats count by ComputerName, Source_Network_Address
+| where Source_Network_Address!="-" AND Source_Network_Address!="::1"
 ```
-Or look at DHCP / Windows logs.
+
+Every successful logon event carries the originating host's IP in `Source_Network_Address`. Filtering out the special values `-` (local logon) and `::1` (loopback) leaves the real network address used by `we8105desk`.
+
 **Answer:** `192.168.250.100`.
+
+> 🛈 The DHCP source (`sourcetype=stream:dhcp`) is the textbook alternative, but BOTS v1 doesn't reliably surface a DHCP lease for this host in the active window — endpoint logon data is the source of truth here.
 
 ---
 
