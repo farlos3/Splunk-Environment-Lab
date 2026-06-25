@@ -315,11 +315,11 @@ index=botsv1 sourcetype=stream:http dest_ip="192.168.250.70" http_method=POST
 ### Q35 — Brute force duration
 ```spl
 index=botsv1 sourcetype=stream:http dest_ip="192.168.250.70" src_ip="23.22.63.114" uri_path="/joomla/administrator/index.php" http_method=POST
-| stats count min(_time) as start max(_time) as end
-| eval duration_minutes = (end - start) / 60
-| eval start_time = strftime(start, "%y-%m-%d %H:%M:%S")
-| eval end_time = strftime(end, "%y-%m-%d %H:%M:%S")
-| table count start_time end_time duration_minutes
+| stats count min(_time) as earliest max(_time) as latest
+| eval duration_minutes = (latest - earliest) / 60
+| eval start_time = strftime(earliest, "%Y-%m-%d %H:%M:%S")
+| eval end_time = strftime(latest, "%Y-%m-%d %H:%M:%S")
+| table start_time end_time duration_minutes
 ```
 **Answer:** Hundreds of attempts within a few minutes.
 
