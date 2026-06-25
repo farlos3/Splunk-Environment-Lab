@@ -17,7 +17,7 @@
 
 What is the IP address of the `imreallynotbatman.com` web server?
 
-**Hint:** Asset identification before attacker attribution. A public web server is the most-contacted destination in inbound HTTP — rank `dest_ip` by event volume and the top row should be obvious.
+**Hint:** Asset identification before attacker attribution. Tie the hostname to an IP by scoping HTTP traffic to the `site` field (the Host header) for `imreallynotbatman.com`, then rank `dest_ip` by event volume — the top row is the server. (Ranking `dest_ip` alone happens to give the same answer here only because this internal server is the most-attacked host.)
 **SOC angle:** Before chasing the attacker, identify the asset under attack.
 
 ---

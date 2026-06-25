@@ -276,9 +276,10 @@ index=botsv1 EventCode=3
 
 ### Q31 — Web server IP
 ```spl
-index=botsv1 sourcetype=stream:http | top limit=1 dest_ip
+index=botsv1 sourcetype=stream:http site="imreallynotbatman.com"
+| top limit=1 dest_ip
 ```
-**Answer:** `192.168.250.70` (imreallynotbatman.com).
+**Answer:** `192.168.250.70` — the internal IP serving `imreallynotbatman.com`. Scoping on `site` (the HTTP Host header) ties the IP to the hostname the question asks about; a bare `top dest_ip` would only tell you the busiest host, which happens to coincide here because the server is under heavy attack.
 
 ---
 
