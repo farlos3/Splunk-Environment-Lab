@@ -135,7 +135,7 @@ What is the IP address of `we8105desk`?
 
 **🔗 Starting point for Scenario B** — this IP is the pivot for nearly every later question (Q42, Q43, Q45, Q46, Q47). Get it right before moving on.
 
-**Hint:** Free-text search the hostname across the index and see which IP addresses co-occur on those events. `stats values(src_ip) values(dest_ip) by host` collapses it into one row per host. DHCP and Windows logon events also bind host↔IP if you want a second source.
+**Hint:** A bare free-text search for the hostname looks tempting but is *noisy* — every host broadcasts/queries this name over DNS/NetBIOS, so the co-occurring IP set is mixed and hard to attribute. For a clean answer, pivot to a log source that **directly binds hostname → IP**: Windows Security logons (`EventCode=4624`), where the host's address rides in `Source_Network_Address` (ignore `-` and `::1`). DHCP (`stream:dhcp`) is the textbook alternative but doesn't reliably surface a lease for this host in BOTS v1's active window.
 **SOC angle:** Identify the first infected host — the rest of the investigation hangs on this.
 
 ---
