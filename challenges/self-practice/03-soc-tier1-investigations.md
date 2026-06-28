@@ -153,6 +153,8 @@ What is the IP address of `we8105desk`?
 What is the first suspicious DNS query made by `we8105desk` on 8/24/2016?
 
 **🔗 Builds on:** Q41 — pivot on the host's IP against `stream:dns`. The timestamp you find here is `t0` for the Q49 dwell-time calculation.
+>
+> 🔁 **Field name changes with the sourcetype:** in Q41 (`WinEventLog:Security`) the host's IP was `Source_Network_Address`; here in `stream:dns` (a network sourcetype) the *same* IP `192.168.250.100` is the normalized field `src_ip`. Carry the value forward, but address it with `src_ip` now.
 
 **Hint:** Pivot on the host's IP from Q41 against `stream:dns`. **Group by the `query{}` field, not `hostname{}`** — this matters: `query{}` is taken from the DNS *question* (always present), while `hostname{}`… see the catch below. Get `earliest(_time)` per domain for a chronological list, then eyeball the early rows for the one that doesn't fit — random-looking labels, weird TLDs, long names.
 

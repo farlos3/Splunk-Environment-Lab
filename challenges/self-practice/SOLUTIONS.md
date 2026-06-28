@@ -414,6 +414,8 @@ Every successful logon event carries the originating host's IP in `Source_Networ
 
 This question is a great case study in **why the field you group by changes your answer**. Walk through the journey.
 
+> 🔁 **Wait — in Q41 the host's IP was `Source_Network_Address`, why is it `src_ip` now?** Same IP (`192.168.250.100`), different field name — *because the sourcetype changed.* Q41 read `WinEventLog:Security` (raw Windows logs that keep Windows' own field names, so there's no `src_ip` — the address is `Source_Network_Address`). Q42 reads `stream:dns`, a **network** sourcetype where Splunk auto-creates the CIM-normalized `src_ip`/`dest_ip`. So the rule of thumb: **network sourcetypes (`stream:*`) → use `src_ip`; raw Windows event logs → use `Source_Network_Address`.** You carry the *value* forward from Q41; you just address it with whatever field the new sourcetype exposes.
+
 #### Step 1 — First attempt with `hostname{}` (the "obvious" field)
 
 The intuitive pivot for DNS triage is the queried hostname. So a first attempt is:
