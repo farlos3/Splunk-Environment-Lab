@@ -412,50 +412,9 @@ Every successful logon event carries the originating host's IP in `Source_Networ
 
 ### Q42 — First suspicious DNS
 
-This question is a great case study in **why the field you group by changes your answer**. Walk through the journey.
+Pivot on the host's IP (from Q41) into `stream:dns` and group by the **`query{}`** field — the canonical, always-populated DNS field — to get the earliest lookup per domain.
 
 > 🔁 **Wait — in Q41 the host's IP was `Source_Network_Address`, why is it `src_ip` now?** Same IP (`192.168.250.100`), different field name — *because the sourcetype changed.* Q41 read `WinEventLog:Security` (raw Windows logs that keep Windows' own field names, so there's no `src_ip` — the address is `Source_Network_Address`). Q42 reads `stream:dns`, a **network** sourcetype where Splunk auto-creates the CIM-normalized `src_ip`/`dest_ip`. So the rule of thumb: **network sourcetypes (`stream:*`) → use `src_ip`; raw Windows event logs → use `Source_Network_Address`.** You carry the *value* forward from Q41; you just address it with whatever field the new sourcetype exposes.
-
-#### Step 1 — First attempt with `hostname{}` (the "obvious" field)
-
-The intuitive pivot for DNS triage is the queried hostname. So a first attempt is:
-
-```spl
-index=botsv1 sourcetype=stream:dns src_ip="192.168.250.100" "hostname{}"="*"
-| stats earliest(_time) as first_seen count by "hostname{}"
-| eval first_seen=strftime(first_seen, "%Y-%m-%d %H:%M:%S")
-| sort first_seen
-| table first_seen, "hostname{}", count
-```
-
-Scrolling to around **16:48** on 8/24/2016, the suspicious-looking row that jumps out is:
-
-| Time | hostname{} | count |
-|---|---|---|
-| **16:48:16** | `dedie73.olfsoft.net` | 2 |
-
-This *is* a real Cerber indicator — `olfsoft.net` is a domain the malware uses for connectivity checks. You might call this the answer and move on. **But it's not the earliest.**
-
-#### Step 2 — Why `hostname{}` lies (the Splunk Stream quirk)
-
-The two fields look interchangeable but come from **different parts of the DNS exchange**:
-
-**(a) `query{}` — the Source of Truth (extracted from the DNS Question)**
-Every web request begins with a mandatory DNS Question packet: *"What's the IP for `<hostname>`?"* That question name lives in the DNS packet's Question section. Splunk Stream copies it verbatim into `query{}` — no parsing, no inference. As long as the host *attempted* to look up the domain, `query{}` is populated. **Guaranteed presence.**
-
-**(b) `hostname{}` — the System's Best-Effort Extraction (from the DNS Response)**
-This field doesn't come from the question — it's Stream's *attempt* to extract a hostname from the **Response** packet (Answer / Authority / Additional sections, which carry A / CNAME / NS records). For well-formed responses this works fine. But drive-by landing pages, fast-flux infrastructure, and malicious resolvers routinely return **odd response shapes** — CNAME chains, truncated answers, NXDOMAIN, no response at all — and Stream can't always find a hostname to lift out. Result: the field stays **NULL** for that event.
-
-**(c) The Silent Drop — why this hides Patient Zero**
-The trap is in `| stats ... by <FieldName>`: when a row's `<FieldName>` is NULL, Splunk **silently drops that row from the output** — no warning, no row in the result. So when you `stats earliest(_time) by "hostname{}"`, every event where Stream failed to extract a hostname disappears. Their `_time` never enters `earliest()`. The Patient Zero domain — which precisely fits the profile of "malicious infrastructure with weird response shapes" — vanishes from your timeline.
-
-That's why grouping by `hostname{}` skipped `solidaritedeproximite.org` (NULL hostname{}, present query{}) and surfaced `dedie73.olfsoft.net` (NULL-free, but later by 4 seconds) as if it were the first.
-
-> 🛈 Why the curly braces? Splunk renders JSON-array source fields with `{}` suffixed to the name. The literal field name *is* `query{}` — you must quote it (`"query{}"`) so SPL doesn't try to interpret the braces.
-
-#### Step 3 — Pivot to `query{}` and uncover the real Patient Zero
-
-Re-run the same logic against the canonical field:
 
 ```spl
 index=botsv1 sourcetype=stream:dns src_ip="192.168.250.100" "query{}"="*"
@@ -465,16 +424,26 @@ index=botsv1 sourcetype=stream:dns src_ip="192.168.250.100" "query{}"="*"
 | table first_seen, "query{}", count
 ```
 
-Now around **16:48** you see two suspicious domains within seconds of each other:
+Around **16:48** on 8/24/2016 you see two suspicious domains within seconds of each other:
 
 | Time | query{} | Role |
 |---|---|---|
-| **16:48:12** | `solidaritedeproximite.org` | **Real Patient Zero** — the drive-by landing page (French-looking long name: "*solidarité de proximité*") |
+| **16:48:12** | `solidaritedeproximite.org` | **Patient Zero** — the drive-by landing page (French-looking long name: "*solidarité de proximité*") |
 | 16:48:16 | `dedie73.olfsoft.net` | Secondary — Cerber's connectivity-check domain |
 
-The `solidaritedeproximite.org` lookup happened **4 seconds earlier** but only ever populated `query{}`, not `hostname{}` — which is exactly why Step 1 hid it.
-
 **Answer:** `solidaritedeproximite.org` (drive-by landing page for the Cerber dropper).
+
+> 🛈 Why the curly braces? Splunk renders JSON-array source fields with `{}` suffixed to the name. The literal field name *is* `query{}` — you must quote it (`"query{}"`) so SPL doesn't try to interpret the braces.
+
+---
+
+#### ⚠️ Pitfall — don't group by `hostname{}` (it hides Patient Zero)
+
+The intuitive move is to group by `hostname{}` instead. **Don't** — it gives the *wrong* answer. The same query grouped by `hostname{}` surfaces `dedie73.olfsoft.net` at 16:48:16 and **misses** `solidaritedeproximite.org` at 16:48:12 entirely, so a *later* domain looks like "the first." Here's why:
+
+- **`query{}` comes from the DNS *question*** (*"what's the IP for `<host>`?"*). Splunk Stream copies it verbatim — as long as the host *attempted* the lookup, it's populated. **Guaranteed presence.**
+- **`hostname{}` comes from the DNS *response*** — Stream's best-effort extraction from the Answer/Authority/Additional records. Malicious domains routinely return odd response shapes (CNAME chains, NXDOMAIN, no response), so Stream can't extract a name and the field stays **NULL**.
+- **The silent drop:** `| stats ... by "hostname{}"` **drops NULL-keyed rows with no warning**. Patient Zero — precisely the "weird response shape" kind of domain — vanishes from the output, and its `_time` never enters `earliest()`.
 
 **Lessons:**
 1. In `stream:dns`, always pivot on `query{}` — it's the canonical field and is consistently populated.
