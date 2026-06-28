@@ -136,6 +136,14 @@ What is the IP address of `we8105desk`?
 **🔗 Starting point for Scenario B** — this IP is the pivot for nearly every later question (Q42, Q43, Q45, Q46, Q47). Get it right before moving on.
 
 **Hint:** A bare free-text search for the hostname looks tempting but is *noisy* — every host broadcasts/queries this name over DNS/NetBIOS, so the co-occurring IP set is mixed and hard to attribute. For a clean answer, pivot to a log source that **directly binds hostname → IP**: Windows Security logons (`EventCode=4624`), where the host's address rides in `Source_Network_Address` (ignore `-` and `::1`). DHCP (`stream:dhcp`) is the textbook alternative but doesn't reliably surface a lease for this host in BOTS v1's active window.
+
+> 🆕 **New to Windows logs? Field primer for Event 4624 (a successful logon).** These are *Windows'* own field names, not the normalized network fields (`src_ip`, `dest_ip`) you used in Q31–Q40, so they look unfamiliar — that's expected:
+> - **`ComputerName`** — the machine that *recorded* the log, i.e. the computer being logged **into** (the destination). Roughly the "where it happened" host.
+> - **`Workstation_Name`** — the name the connecting client reported for **itself**, i.e. where the logon came **from**. It's a *name*, not an IP, and clients can report it inconsistently — useful as a cross-check, not as your answer.
+> - **`Source_Network_Address`** — the **IP address the logon came from**. This is the field that actually carries an IP, which is why it's the one you read.
+>
+> **Why not `src_ip`?** `src_ip`/`dest_ip` are *CIM-normalized* fields that Splunk auto-creates for network sourcetypes like `stream:http`. Raw `WinEventLog:Security` events keep Windows' native field names, so the source IP is literally called `Source_Network_Address` here — there's no `src_ip` to search unless an add-on has aliased it.
+
 **SOC angle:** Identify the first infected host — the rest of the investigation hangs on this.
 
 ---
@@ -146,7 +154,10 @@ What is the first suspicious DNS query made by `we8105desk` on 8/24/2016?
 
 **🔗 Builds on:** Q41 — pivot on the host's IP against `stream:dns`. The timestamp you find here is `t0` for the Q49 dwell-time calculation.
 
-**Hint:** Pivot on the host's IP from Q41 against `stream:dns`. Group queries by `earliest(_time)` so you get a chronological list, then eyeball the early rows for the one that doesn't fit — random-looking labels, weird TLDs, long names.
+**Hint:** Pivot on the host's IP from Q41 against `stream:dns`. **Group by the `query{}` field, not `hostname{}`** — this matters: `query{}` is taken from the DNS *question* (always present), while `hostname{}`… see the catch below. Get `earliest(_time)` per domain for a chronological list, then eyeball the early rows for the one that doesn't fit — random-looking labels, weird TLDs, long names.
+
+> ⚠️ **Beginner trap:** `hostname{}` is extracted from the DNS *response*, which malicious domains often return malformed — so the field comes back NULL, and `stats ... by "hostname{}"` **silently drops those rows**. The real patient-zero domain disappears and a *later* domain looks like "the first." Always group by `query{}` here. (The `{}` is part of the literal field name — Splunk's notation for a JSON-array field — so you must quote it: `"query{}"`.)
+
 **SOC angle:** Drive-by and phishing landing pages routinely use throwaway domains.
 
 ---
@@ -158,7 +169,7 @@ fired? Look at process-creation events around the infection time.
 
 **🔗 Builds on:** Q41 (host) + Q42 — use the Q42 DNS timestamp to know *when* "around the infection time" is. This dropper timestamp also feeds the Q48 timeline and Q49 dwell time.
 
-**Hint:** Walk the host's process-creation events (Sysmon EID 1) in chronological order. The CommandLine and Image fields tell the story. Red flags: scripting hosts (`cscript`/`wscript`/`powershell`), processes launched from `%TEMP%`, anything with `.tmp` or `.vbs` extensions.
+**Hint:** Walk the host's process-creation events (Sysmon EID 1 — in Splunk you filter this with `EventCode=1`) in chronological order. The CommandLine and Image fields tell the story. Red flags: scripting hosts (`cscript`/`wscript`/`powershell`), processes launched from `%TEMP%`, anything with `.tmp` or `.vbs` extensions.
 **SOC angle:** Cerber's typical chain: VBScript dropper → `.tmp` payload → encryption binary.
 
 ---

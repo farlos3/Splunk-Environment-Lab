@@ -393,6 +393,17 @@ index=botsv1 sourcetype="WinEventLog:Security" EventCode=4624 "we8105desk"
 
 Every successful logon event carries the originating host's IP in `Source_Network_Address`. Filtering out the special values `-` (local logon) and `::1` (loopback) leaves the real network address used by `we8105desk`.
 
+**Reading the `stats` fields (these are Windows' native names, not the `src_ip`/`dest_ip` you used earlier):**
+
+| Field | What it means | Why it's here |
+|---|---|---|
+| `ComputerName` | The machine that *recorded* the event = the host being logged **into** (destination). | Confirms the event belongs to `we8105desk`. |
+| `Workstation_Name` | The name the connecting client reported for **itself** (where the logon came from) — a *name*, not an IP. | Cross-check only; clients report it inconsistently. |
+| `Source_Network_Address` | The **IP the logon came from** — the only field carrying an actual address. | This is your answer. |
+| `EventCode` | `4624` = successful logon. | Sanity check the filter held. |
+
+> ⚠️ Why not `src_ip`? `src_ip`/`dest_ip` are *CIM-normalized* fields Splunk auto-creates for network sourcetypes (`stream:*`). Raw `WinEventLog:Security` events keep Windows' own field names, so the source address is `Source_Network_Address` — there's no `src_ip` to search here unless an add-on aliases it.
+
 **Answer:** `192.168.250.100`.
 
 > 🛈 The DHCP source (`sourcetype=stream:dhcp`) is the textbook alternative, but BOTS v1 doesn't reliably surface a DHCP lease for this host in the active window — endpoint logon data is the source of truth here.
@@ -492,9 +503,9 @@ index=botsv1 sourcetype=suricata Cerber
 
 ### Q45 — Encryption phase URL
 ```spl
-index=botsv1 sourcetype=stream:dns src=192.168.250.100
-  (query="*onion*" OR query="*cerber*" OR query="*hjhqmbxyinislkkt*")
-| stats count by query
+index=botsv1 sourcetype=stream:dns src_ip="192.168.250.100"
+  ("query{}"="*onion*" OR "query{}"="*cerber*" OR "query{}"="*xmfir0*")
+| stats count by "query{}"
 | sort - count
 ```
 **Answer:** `cerberhhyed5frqa.xmfir0.win` (TOR gateway used for the ransom note).
@@ -535,21 +546,23 @@ index=botsv1 host=we8105desk EventCode=12 TargetObject="*USBSTOR*"
 
 ### Q48 — Timeline (example)
 
+Times below are anchored to the patient-zero DNS lookup from Q42 (**16:48:12**); the minute-by-minute offsets are illustrative — read the real ones off the reconstruct query.
+
 ```
-08/24/2016 17:00  - we8105desk visits solidaritedeproximite.org (drive-by landing)
-08/24/2016 17:01  - cscript.exe executes a VBScript dropper
-08/24/2016 17:02  - 121214.tmp written and executed (Cerber payload)
-08/24/2016 17:03  - DNS lookup for cerberhhyed5frqa.xmfir0.win (C2 / ransom URL)
-08/24/2016 17:04  - SMB connections to the file server, encryption begins
-08/24/2016 17:15  - Ransom note dropped; encryption phase complete
+08/24/2016 16:48  - we8105desk visits solidaritedeproximite.org (drive-by landing)  [Q42]
+08/24/2016 16:49  - cscript.exe executes a VBScript dropper                          [Q43]
+08/24/2016 16:50  - 121214.tmp written and executed (Cerber payload)                 [Q43]
+08/24/2016 16:50  - DNS lookup for cerberhhyed5frqa.xmfir0.win (C2 / ransom URL)     [Q45]
+08/24/2016 16:51  - SMB connections to the file server, encryption begins           [Q46]
+08/24/2016 17:00  - Ransom note dropped; encryption phase complete                  [Q44/Q46]
 ```
-Reconstruct via:
+Reconstruct via (note the window starts *before* 16:48 so it actually captures patient zero):
 ```spl
 index=botsv1 host=we8105desk
   (EventCode=1 OR sourcetype=stream:dns OR sourcetype=suricata)
-  earliest="08/24/2016:17:00:00" latest="08/24/2016:17:30:00"
+  earliest="08/24/2016:16:40:00" latest="08/24/2016:17:30:00"
 | sort _time
-| table _time sourcetype EventCode Image query alert.signature
+| table _time sourcetype EventCode Image "query{}" alert.signature
 ```
 
 ---
@@ -558,7 +571,7 @@ index=botsv1 host=we8105desk
 Use the initial DNS query and the first encrypted-file write as your bookends:
 ```spl
 index=botsv1 host=we8105desk
-  (query="*solidarite*" OR file_name="*.cerber*")
+  ("query{}"="*solidarite*" OR filename="*.cerber*" OR file_name="*.cerber*")
 | stats earliest(_time) as t0 latest(_time) as t1
 | eval dwell_min=round((t1-t0)/60,1)
 ```
@@ -570,11 +583,11 @@ index=botsv1 host=we8105desk
 
 ```
 [Severity: CRITICAL] Cerber ransomware infection on host we8105desk
-(192.168.250.100, user bob.smith) detected at 2016-08-24 17:15 UTC.
+(192.168.250.100, user bob.smith) detected at 2016-08-24 17:00 UTC.
 
-INITIAL VECTOR: drive-by download from solidaritedeproximite.org at 17:00,
+INITIAL VECTOR: drive-by download from solidaritedeproximite.org at 16:48,
 delivering a VBScript via cscript.exe which dropped 121214.tmp (Cerber payload)
-at 17:02.
+at 16:50.
 
 IMPACT: encryption of bob.smith's local user profile and files on the remote
 share \\we9041srv, including N PDFs and other office documents. The ransom
