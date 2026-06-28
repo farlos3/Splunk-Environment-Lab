@@ -452,6 +452,45 @@ The intuitive move is to group by `hostname{}` instead. **Don't** — it gives t
 
 ---
 
+#### 🧹 Bonus — when the output is hundreds of noisy rows, how do you find the one domain?
+
+Run the query above for real and you don't get a tidy two-row table — you get **hundreds of rows** of reverse-DNS lookups, Windows telemetry, and NetBIOS junk, with `solidaritedeproximite.org` buried in the middle. You are *not* expected to write the perfect filter up front. Analysts do **subtractive triage**: remove what you recognize as normal, one layer at a time, until only the odd ones are left.
+
+**First, recognize the normal "noise" categories:**
+
+| Pattern in the output | What it is | Verdict |
+|---|---|---|
+| `FHEFDJDADEDB…` (gibberish, **no dots**) | encoded **NetBIOS** broadcast names | normal |
+| `*.in-addr.arpa` | **reverse DNS (PTR)** lookups | normal plumbing |
+| `*.local`, `_ldap._tcp.…waynecorpinc.local` | internal AD / domain | normal |
+| `wpad`, `wpad.waynecorpinc.local` | proxy auto-discovery | normal |
+| `*.microsoft.com`, `*.msftncsi.com` | Windows telemetry | normal |
+
+**You don't need to know any filter in advance — get there one of three ways:**
+
+1. **Click to exclude (zero syntax).** In the results, click a noise value → **"Exclude from results"**. Splunk writes the `NOT …` clause for you. Repeat for each junk pattern.
+2. **Peel off the biggest pile first with `NOT` + `*` (wildcards, not regex).** Look at what repeats most, exclude it, re-run, look again:
+   ```spl
+   index=botsv1 sourcetype=stream:dns src_ip="192.168.250.100" "query{}"="*"
+   | stats earliest(_time) as first_seen count by "query{}"
+   | search NOT "query{}"="*.in-addr.arpa" NOT "query{}"="*.local"
+           NOT "query{}"="wpad*" NOT "query{}"="*.microsoft.com" NOT "query{}"="*.msftncsi.com"
+   | eval first_seen=strftime(first_seen, "%Y-%m-%d %H:%M:%S")
+   | sort first_seen
+   ```
+   After two or three rounds the list collapses to a handful you can eyeball.
+3. **(Optional) one line of regex** to drop the dot-less NetBIOS gibberish, *if* it still bothers you — but you can also just ignore it, since a name with no dot isn't a real domain:
+   ```spl
+   | regex "query{}"="\."
+   ```
+   `\.` means "contains a literal dot." That's the *only* regex here, and now you know it.
+
+**What's left after the noise is gone:** `solidaritedeproximite.org` (16:48:12) and `ipinfo.io` (16:49:24). The first is Patient Zero (earliest external, non-infrastructure domain); `ipinfo.io` is later — malware checking its own public IP *after* infection.
+
+> 💡 The filter isn't something you memorize — it **emerges from looking at the data.** Do this across a few investigations and you'll *know* your environment's baseline noise by heart. That baseline knowledge — not regex syntax — is the real analyst skill. And always **confirm by pivoting**: the true Patient Zero is the domain immediately followed by the dropper (`cscript.exe` in Q43).
+
+---
+
 ### Q43 — Initial dropper
 ```spl
 index=botsv1 host=we8105desk EventCode=1
