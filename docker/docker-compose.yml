@@ -35,6 +35,15 @@ services:
       - splunk-botsv1:/opt/splunk/etc/apps/botsv1_data_set
       - splunk-botsv2:/opt/splunk/etc/apps/botsv2_data_set
       - splunk-botsv3:/opt/splunk/etc/apps/botsv3_data_set
+      # Search-time Sysmon XML field extractions (EventCode, Image,
+      # CommandLine, ...). The BOTS archives ship the raw XML but no
+      # parser, since Splunk_TA_windows isn't installed. Bind mount from
+      # the repo so it's version-controlled and survives container
+      # recreation (config bind mounts are fine — only index bucket bind
+      # mounts trip validatedb). NOT read-only: the image's ansible
+      # entrypoint runs `chown -R` over /opt/splunk/etc/apps on every
+      # boot, which fails hard (EROFS) against a :ro mount.
+      - ./apps/bots_sysmon_extractions:/opt/splunk/etc/apps/bots_sysmon_extractions
       # Persistent state — survives `docker compose restart`, killed by `down -v`.
       - splunk-var:/opt/splunk/var
       - splunk-etc-users:/opt/splunk/etc/users

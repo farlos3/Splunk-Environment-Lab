@@ -171,8 +171,16 @@ fired? Look at process-creation events around the infection time.
 
 **🔗 Builds on:** Q41 (host) + Q42 — use the Q42 DNS timestamp to know *when* "around the infection time" is. This dropper timestamp also feeds the Q48 timeline and Q49 dwell time.
 
-**Hint:** Walk the host's process-creation events (Sysmon EID 1 — in Splunk you filter this with `EventCode=1`) in chronological order. The CommandLine and Image fields tell the story. Red flags: scripting hosts (`cscript`/`wscript`/`powershell`), processes launched from `%TEMP%`, anything with `.tmp` or `.vbs` extensions.
-**SOC angle:** Cerber's typical chain: VBScript dropper → `.tmp` payload → encryption binary.
+**Hint — don't scroll, *filter*.** A bare `index=botsv1 host=we8105desk EventCode=1` returns ~305 process-creation events. Reading all of them by hand is the wrong instinct — the skill is narrowing to the few that matter. Work down this funnel, running each step and watching the count shrink:
+
+1. **Scope to the victim user.** The infection arrived through a person opening a file, so drop everything run by service accounts (`NT AUTHORITY\SYSTEM`, `LOCAL SERVICE`, …) and keep only Bob: add `User="*bob.smith*"`. That alone removes most of the OS/Splunk/Acronis boot noise.
+2. **Ask "what should *never* happen on a healthy box?"** Office apps don't spawn command shells; script hosts don't run code out of a user's profile. Add an OR-filter for those tell-tales:
+   `(ParentImage="*WINWORD*" OR Image="*wscript.exe" OR Image="*cscript.exe" OR Image="*powershell*" OR CommandLine="*AppData*" OR CommandLine="*.vbs*" OR CommandLine="*.tmp*")`
+3. **Read the survivors in time order** (`| sort _time`). Now it's only a handful of rows and the parent→child chain tells the whole story.
+
+**Watch out for one piece of bait:** you'll see `cscript.exe` running `.vbs` files from `C:\Windows\TEMP` under `NT AUTHORITY\SYSTEM` — that's **Acronis backup**, not the attack. Step 1 (scoping to `bob.smith`) is exactly what filters it out. The real dropper runs as Bob, not SYSTEM.
+
+**SOC angle:** Cerber's chain here is **Word macro → `cmd.exe` → `wscript.exe` running a `.vbs` dropper → `.tmp` payload**. The lesson isn't the IOCs — it's the funnel: *scope to the user, then filter on behaviour that shouldn't exist.*
 
 ---
 

@@ -492,12 +492,47 @@ Run the query above for real and you don't get a tidy two-row table — you get 
 ---
 
 ### Q43 — Initial dropper
+
+**Don't start by reading 305 rows — narrow them down.** Here's the funnel, step by step.
+
+**Step 1 — the naive search (too noisy).**
 ```spl
 index=botsv1 host=we8105desk EventCode=1
 | table _time User ParentImage Image CommandLine
 | sort _time
 ```
-**Answer:** `cscript.exe` running a VBScript that drops `121214.tmp` (the Cerber payload).
+~305 events: Windows boot, Splunk forwarder, Acronis backup… almost all benign. This is the *starting point*, not the answer.
+
+**Step 2 — scope to the victim user.** The infection came through Bob opening a file, so cut everything run by service accounts:
+```spl
+index=botsv1 host=we8105desk EventCode=1 User="*bob.smith*"
+| table _time ParentImage Image CommandLine
+| sort _time
+```
+This already removes the bait — the `cscript.exe` running `.vbs` from `C:\Windows\TEMP` you saw earlier is **Acronis backup running as `NT AUTHORITY\SYSTEM`**, not the attack. Scoping to Bob drops it.
+
+**Step 3 — filter on behaviour that should never happen.** Office apps don't launch shells; script hosts don't run code from a user's profile:
+```spl
+index=botsv1 host=we8105desk EventCode=1 User="*bob.smith*"
+  (ParentImage="*WINWORD*" OR Image="*wscript.exe" OR Image="*cscript.exe"
+   OR Image="*powershell*" OR CommandLine="*AppData*" OR CommandLine="*.vbs*" OR CommandLine="*.tmp*")
+| table _time ParentImage Image CommandLine
+| sort _time
+```
+Now you're down to a handful of rows, and the parent→child chain is obvious:
+
+| time | ParentImage → Image | what it is |
+|---|---|---|
+| 16:43:21 | `WINWORD.EXE` → `cmd.exe` | malicious Word macro fires, builds a `%RANDOM%.vbs` in `%APPDATA%` |
+| 16:43:21 | `cmd.exe` → `wscript.exe` (`…\AppData\Roaming\20429.vbs`) | **the dropper** — VBScript that fetches the payload |
+| 16:48:21 | `wscript`/`cmd` → `121214.tmp` | Cerber payload executed from `AppData\Roaming` |
+| 16:48:41 | `cmd.exe` → `taskkill` + `del` | payload deletes itself to cover tracks |
+
+**Answer:** The initial dropper is the VBScript **`20429.vbs`**, run by **`wscript.exe`**, which a **Word macro** (`WINWORD.EXE` → `cmd.exe`) wrote into `AppData\Roaming` and launched. It drops and executes **`121214.tmp`** (the Cerber payload).
+
+> ⚠️ **Heads-up — the `cscript.exe` red herring.** Skim the raw EventCode=1 list and the first scripting host you hit is `cscript.exe` running `.vbs` files. It's tempting to call that the dropper — but look at the **User** (`NT AUTHORITY\SYSTEM`) and **ParentImage** (`…\Acronis\…\mms_mini.exe`): it's the backup product, completely unrelated. The actual dropper runs as **`bob.smith`** and uses **`wscript.exe`**. The whole reason Step 2 scopes to the user is to kill this trap. Always check *who* ran a process and *what launched it* before calling it malicious.
+
+> 🧩 **Why `EventCode=1` and `Image`/`CommandLine` exist at all here.** Those fields don't live in the raw Sysmon event — they're *search-time extractions*. A real Sysmon event is XML: the event id is `<EventID>1</EventID>` and the process details are `<Data Name='Image'>…</Data>`, `<Data Name='CommandLine'>…</Data>`, etc. In production a Windows box, those get parsed by **`Splunk_TA_windows`**, which renames `EventID`→`EventCode` and pulls each `<Data Name='X'>` into a field `X`. This lab doesn't ship that TA, so a tiny add-on (`docker/apps/bots_sysmon_extractions/`) does the same job via `props.conf`/`transforms.conf`. The takeaway for an analyst: **convenient field names are a parsing convention, not ground truth.** If `EventCode=1` ever returns nothing, don't assume "no data" — check whether the sourcetype is actually being *parsed* (`… | head 1` and read `_raw`). Two gotchas this dataset shows off: (1) classic `WinEventLog` is `key=value` text so `EventCode` auto-extracts, but `XmlWinEventLog` is XML and needs a parser; (2) `props.conf` stanza names are **case-sensitive** — BOTSv1 indexed Sysmon under *both* `XmlWinEventLog:…` and `xmlwineventlog:…`, so the add-on lists both.
 
 ---
 
