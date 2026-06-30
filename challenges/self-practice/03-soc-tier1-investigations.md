@@ -215,8 +215,13 @@ many PDFs were encrypted there?
 
 **🔗 Builds on:** Q41 — start from the host's SMB connections. The first `.cerber` write timestamp you find here is `t1` for the Q49 dwell-time calculation.
 
-**Hint:** Two separate searches stitched together. (1) SMB share access — look for sourcetypes containing `smb` or Windows EventCodes 5140/5145, group by `dest_ip` + `ShareName` to find the server. (2) Cerber renames encrypted files with a `.cerber` extension — free-text search for that suffix and distinct-count the filenames.
-**SOC angle:** Lateral encryption via SMB shares is the textbook ransomware blast-radius expansion.
+**Hint — two separate searches, do them one at a time.**
+
+*Part 1 — find the server.* Where did `we8105desk` open SMB sessions? Search `sourcetype=stream:smb src_ip="192.168.250.100"` and `stats count by dest_ip`. One IP will dwarf the rest — that's the file server. (Ignore the broadcast address `…255` and stray IPs.)
+
+*Part 2 — count the PDFs.* ⚠️ **The trap:** your instinct is to search `*.pdf.cerber` — but that returns **nothing**. Cerber doesn't keep the original name; it *renames* `report.pdf` to random characters like `aB3xK9.cerber`, so the `.pdf` is gone. You can't count encrypted PDFs by their *new* names. Instead, count the distinct PDF names the host touched on that share **before** they were encrypted — the SMB read traffic still carries them: `sourcetype=stream:smb dest_ip="<server>" "*.pdf*"` then `| stats dc(filename)`.
+
+**SOC angle:** Lateral encryption via SMB shares is the textbook ransomware blast-radius expansion — and "count the impacted files" is a question where the *naive* IOC search misleads you. Think about what the data looked like *before* the attack, not just after.
 
 ---
 
@@ -226,8 +231,8 @@ Was a USB device inserted into Bob Smith's workstation? If so, what was its name
 
 **🔗 Builds on:** Q41 — scope registry events to `we8105desk` (Bob Smith's host).
 
-**Hint:** Windows leaves a trail under the `USBSTOR` registry subkey whenever a removable drive is connected. On a host with Sysmon, that shows up as registry events (EID 12/13) where `TargetObject` contains `USBSTOR`. The device name is embedded in the key path.
-**SOC angle:** USB-drop is a classic initial-access technique — always check.
+**Hint — find the right data source first.** Windows records removable drives under the `USBSTOR` registry path. In *this* dataset that trail is in the **`winregistry`** sourcetype (Windows registry monitoring), **not** Sysmon — so start by confirming where the data lives: `index=botsv1 host=we8105desk USBSTOR | stats count by sourcetype`. Once you see it's `winregistry`, narrow to the key that holds the human-readable label: the `FriendlyName` registry value. Search `sourcetype=winregistry key_path="*USBSTOR*" key_path="*friendlyname*"` and read the `data` field — that's the device name.
+**SOC angle:** USB-drop is a classic initial-access technique — always check. And note the lesson: *don't assume which sourcetype holds an artifact* — the same `USBSTOR` evidence could be in Sysmon, `winregistry`, or `WinEventLog` depending on what's collected. Let `stats count by sourcetype` tell you, don't guess.
 
 ---
 

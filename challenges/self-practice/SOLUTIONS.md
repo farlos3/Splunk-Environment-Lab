@@ -542,7 +542,7 @@ index=botsv1 sourcetype=suricata Cerber
 | stats count by alert.signature_id alert.signature
 | sort count | head 5
 ```
-**Answer:** The lowest-firing signature is usually the one that fires once on the outbound C2 callback.
+**Answer:** **5 Cerber alerts total**, across **3 signatures**. Sorted ascending, the rarest is `ETPRO TROJAN Ransomware/Cerber Checkin 2` (sig id **2816763**, fired **once**) — the outbound C2 check-in. The other two are `Cerber Checkin Error ICMP Response` (×2) and `Cerber Onion Domain Lookup` (×2).
 
 ---
 
@@ -558,49 +558,54 @@ index=botsv1 sourcetype=stream:dns src_ip="192.168.250.100"
 ---
 
 ### Q46 — File server
+
+**Part 1 — which server?** Look at where `we8105desk` opened SMB sessions:
 ```spl
-index=botsv1 host=we8105desk
-  (sourcetype=*smb* OR EventCode IN (5140,5145))
-| stats count by dest_ip ShareName
+index=botsv1 sourcetype=stream:smb src_ip="192.168.250.100"
+| stats count by dest_ip
 | sort - count
 ```
-**Answer:** The fileserver IP (typically `192.168.250.20`, hostname `we9041srv`).
+One IP dominates: **`192.168.250.20`** (~39k events) — the file server `we9041srv`. The other dest IPs are broadcast/noise.
 
-PDF count:
+**Part 2 — how many PDFs?** ⚠️ The obvious query (`filename="*.pdf.cerber"`) returns **0**, and that's the trap: Cerber doesn't append `.cerber` to the original name — it *renames* the file to random characters, so `report.pdf` becomes something like `aB3xK9.cerber`. The `.pdf` is gone. So you can't count "encrypted PDFs" by their new names. Instead, count the **distinct PDF filenames the host touched on that share** (the SMB read traffic still carries the original names *before* encryption):
 ```spl
-index=botsv1 *.pdf
-| search filename="*.cerber*" OR file_name="*.cerber*"
-| stats dc(filename) as encrypted_pdfs by host
+index=botsv1 sourcetype=stream:smb dest_ip="192.168.250.20" "*.pdf*"
+| stats dc(filename) as distinct_pdfs
 ```
+**Answer:** File server **`192.168.250.20` (`we9041srv`)**, and **23** distinct PDFs were touched/encrypted. (For context, the encryption left **125** distinct `.cerber`-renamed files on the share.)
 
 ---
 
 ### Q47 — USB device
+
+The USB trail lives in the **`winregistry`** sourcetype, *not* Sysmon — Windows records removable drives under the `USBSTOR` registry path. First confirm where the data is:
 ```spl
-index=botsv1 host=we8105desk
-  (EventCode=43 OR "USBSTOR" OR DeviceClass="*disk*")
-| table _time host TargetObject Image
+index=botsv1 host=we8105desk USBSTOR
+| stats count by sourcetype
 ```
-Or:
+→ all the hits are `sourcetype=winregistry` (~193 events). Now pull the device's friendly name out of the registry key (the `FriendlyName` value holds the human-readable label):
 ```spl
-index=botsv1 host=we8105desk EventCode=12 TargetObject="*USBSTOR*"
+index=botsv1 host=we8105desk sourcetype=winregistry key_path="*USBSTOR*" key_path="*friendlyname*"
+| table _time key_path data
 ```
-**Answer:** USB device "Miranda_Tate_Unveiled" (from the BOTS v1 lore).
+**Answer:** A USB flash drive was inserted; its friendly name is **`MIRANDA_PRI`** (`Ven_Generic&Prod_Flash_Disk`). 
+
+> ⚠️ Earlier versions of this answer key said "Miranda_Tate_Unveiled" — that's wrong for this dataset. The registry `FriendlyName` value is literally **`MIRANDA_PRI`**; trust the data, not lore.
 
 ---
 
 ### Q48 — Timeline (example)
 
-Times below are anchored to the patient-zero DNS lookup from Q42 (**16:48:12**); the minute-by-minute offsets are illustrative — read the real ones off the reconstruct query.
+Times below are the **real** anchors verified against the data:
 
 ```
-08/24/2016 16:48  - we8105desk visits solidaritedeproximite.org (drive-by landing)  [Q42]
-08/24/2016 16:49  - cscript.exe executes a VBScript dropper                          [Q43]
-08/24/2016 16:50  - 121214.tmp written and executed (Cerber payload)                 [Q43]
-08/24/2016 16:50  - DNS lookup for cerberhhyed5frqa.xmfir0.win (C2 / ransom URL)     [Q45]
-08/24/2016 16:51  - SMB connections to the file server, encryption begins           [Q46]
-08/24/2016 17:00  - Ransom note dropped; encryption phase complete                  [Q44/Q46]
+08/24/2016 16:43:21 - Word macro fires: WINWORD.EXE -> cmd.exe -> wscript.exe 20429.vbs   [Q43]
+08/24/2016 16:48:12 - 20429.vbs resolves solidaritedeproximite.org (pulls the payload)    [Q42]
+08/24/2016 16:48:21 - 121214.tmp written to AppData\Roaming and executed (Cerber)         [Q43]
+08/24/2016 ~16:48   - DNS lookup for cerberhhyed5frqa.xmfir0.win + Suricata C2 check-in    [Q44/Q45]
+08/24/2016 17:04:33 - first .cerber file written on \\192.168.250.20 (encryption begins)   [Q46]
 ```
+Note the order: the **dropper executes first (16:43)**, then sleeps/loops before reaching out to its download domain at 16:48 — that's why `solidaritedeproximite.org` (Q42's "patient zero") appears *after* the initial process launch, not before.
 Reconstruct via (note the window starts *before* 16:48 so it actually captures patient zero):
 ```spl
 index=botsv1 host=we8105desk
@@ -613,14 +618,21 @@ index=botsv1 host=we8105desk
 ---
 
 ### Q49 — Dwell time
-Use the initial DNS query and the first encrypted-file write as your bookends:
+Two bookends: `t0` = the first compromise reach-out (the `solidaritedeproximite.org` DNS lookup, Q42), `t1` = the first `.cerber` file write on the share (Q46). Compute the earliest timestamp of each, then subtract:
 ```spl
-index=botsv1 host=we8105desk
-  ("query{}"="*solidarite*" OR filename="*.cerber*" OR file_name="*.cerber*")
-| stats earliest(_time) as t0 latest(_time) as t1
+index=botsv1
+  (sourcetype=stream:dns "query{}"="*solidarite*")
+  OR (sourcetype=stream:smb ".cerber")
+| eval marker=if(sourcetype=="stream:dns","t0","t1")
+| stats min(_time) as ts by marker
+| stats min(eval(if(marker=="t0",ts,null()))) as t0
+        min(eval(if(marker=="t1",ts,null()))) as t1
 | eval dwell_min=round((t1-t0)/60,1)
+| eval t0=strftime(t0,"%H:%M:%S"), t1=strftime(t1,"%H:%M:%S")
 ```
-**Answer:** Approximately 10–15 minutes — Cerber moves very fast.
+**Answer:** `t0` = **16:48:12**, `t1` = **17:04:33** → dwell time ≈ **16 minutes** (16.3 min). Cerber moves fast — initial reach-out to encryption in well under half an hour.
+
+> 💡 If you instead anchor `t0` to the *very first* malicious process (the Word macro / `wscript.exe` at **16:43:21**), dwell is ~21 min. Either is defensible — just state which event you called "initial compromise." That explicitness is what a Tier 2 reviewer wants.
 
 ---
 
@@ -630,14 +642,16 @@ index=botsv1 host=we8105desk
 [Severity: CRITICAL] Cerber ransomware infection on host we8105desk
 (192.168.250.100, user bob.smith) detected at 2016-08-24 17:00 UTC.
 
-INITIAL VECTOR: drive-by download from solidaritedeproximite.org at 16:48,
-delivering a VBScript via cscript.exe which dropped 121214.tmp (Cerber payload)
-at 16:50.
+INITIAL VECTOR: malicious Word macro (WINWORD.EXE -> cmd.exe) that wrote and ran
+a VBScript dropper (20429.vbs) via wscript.exe at 16:43, which reached out to
+solidaritedeproximite.org at 16:48 and dropped/executed 121214.tmp (Cerber
+payload) at 16:48:21.
 
 IMPACT: encryption of bob.smith's local user profile and files on the remote
-share \\we9041srv, including N PDFs and other office documents. The ransom
-note points to TOR gateway cerberhhyed5frqa.xmfir0.win. Dwell time:
-approximately 12 minutes.
+share \\we9041srv (192.168.250.20), including 23 PDFs and other office
+documents (125 files renamed with the .cerber extension). The ransom note
+points to TOR gateway cerberhhyed5frqa.xmfir0.win. Dwell time: approximately
+16 minutes (16:48 -> 17:04).
 
 CONTAINMENT: isolated we8105desk from the network; disabled bob.smith;
 blocked solidaritedeproximite.org and cerberhhyed5frqa.xmfir0.win at the
@@ -645,9 +659,10 @@ perimeter.
 
 IOCs delivered to Tier 2:
   Domains  : solidaritedeproximite.org, cerberhhyed5frqa.xmfir0.win
-  Files    : 121214.tmp, *.cerber, *.cerber3
-  Process  : cscript.exe -> 121214.tmp
-  Suricata : ET TROJAN W32/Cerber signature IDs (see attached)
+  Files    : 20429.vbs (dropper), 121214.tmp (payload), *.cerber (encrypted)
+  Process  : WINWORD.EXE -> cmd.exe -> wscript.exe (20429.vbs) -> 121214.tmp
+  Removable: USB flash drive FriendlyName "MIRANDA_PRI" inserted on we8105desk
+  Suricata : ETPRO Cerber sig IDs 2816763 / 2816764 / 2820156
 ```
 
 ---
