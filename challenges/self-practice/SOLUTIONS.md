@@ -503,7 +503,7 @@ index=botsv1 host=we8105desk EventCode=1
 ```
 ~305 events: Windows boot, Splunk forwarder, Acronis backup… almost all benign. This is the *starting point*, not the answer.
 
-**Step 2 — scope to the victim user.** The infection came through Bob opening a file, so cut everything run by service accounts:
+**Step 2 — scope to the victim user.** Which user? Don't assume — derive it: `… EventCode=1 | stats count by User` shows the box is mostly service accounts (`NT AUTHORITY\SYSTEM`, `NETWORK SERVICE`, `LOCAL SERVICE`) plus one dominant *human* account, `WAYNECORPINC\bob.smith` (~205 events). He's the workstation owner (same Bob from Q41), so he's who could have opened a malicious file. Cut everything else:
 ```spl
 index=botsv1 host=we8105desk EventCode=1 User="*bob.smith*"
 | table _time ParentImage Image CommandLine

@@ -173,7 +173,8 @@ fired? Look at process-creation events around the infection time.
 
 **Hint — don't scroll, *filter*.** A bare `index=botsv1 host=we8105desk EventCode=1` returns ~305 process-creation events. Reading all of them by hand is the wrong instinct — the skill is narrowing to the few that matter. Work down this funnel, running each step and watching the count shrink:
 
-1. **Scope to the victim user.** The infection arrived through a person opening a file, so drop everything run by service accounts (`NT AUTHORITY\SYSTEM`, `LOCAL SERVICE`, …) and keep only Bob: add `User="*bob.smith*"`. That alone removes most of the OS/Splunk/Acronis boot noise.
+0. **First, who even uses this box?** Don't assume the username — *derive* it. Run `index=botsv1 host=we8105desk EventCode=1 | stats count by User`. You'll see a pile of service accounts (`NT AUTHORITY\SYSTEM`, `NETWORK SERVICE`, `LOCAL SERVICE` — those are the OS, not a person) and one dominant **human** account: `WAYNECORPINC\bob.smith` (~205 events). That's the workstation's owner — the one who could have opened a malicious file. (You also met him back in Q41: `we8105desk` is Bob's desk.)
+1. **Scope to the victim user.** Now that the data told you it's Bob, drop everything run by service accounts and keep only him: add `User="*bob.smith*"`. That alone removes most of the OS/Splunk/Acronis boot noise.
 2. **Ask "what should *never* happen on a healthy box?"** Office apps don't spawn command shells; script hosts don't run code out of a user's profile. Add an OR-filter for those tell-tales:
    `(ParentImage="*WINWORD*" OR Image="*wscript.exe" OR Image="*cscript.exe" OR Image="*powershell*" OR CommandLine="*AppData*" OR CommandLine="*.vbs*" OR CommandLine="*.tmp*")`
 3. **Read the survivors in time order** (`| sort _time`). Now it's only a handful of rows and the parent→child chain tells the whole story.
