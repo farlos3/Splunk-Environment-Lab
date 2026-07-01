@@ -487,7 +487,7 @@ Run the query above for real and you don't get a tidy two-row table — you get 
 
 **What's left after the noise is gone:** `solidaritedeproximite.org` (16:48:12) and `ipinfo.io` (16:49:24). The first is Patient Zero (earliest external, non-infrastructure domain); `ipinfo.io` is later — malware checking its own public IP *after* infection.
 
-> 💡 The filter isn't something you memorize — it **emerges from looking at the data.** Do this across a few investigations and you'll *know* your environment's baseline noise by heart. That baseline knowledge — not regex syntax — is the real analyst skill. And always **confirm by pivoting**: the true Patient Zero is the domain immediately followed by the dropper (`cscript.exe` in Q43).
+> 💡 The filter isn't something you memorize — it **emerges from looking at the data.** Do this across a few investigations and you'll *know* your environment's baseline noise by heart. That baseline knowledge — not regex syntax — is the real analyst skill. And always **confirm by pivoting**: the true Patient Zero is the domain immediately followed by the dropper (`wscript.exe` running `20429.vbs` in Q43 — *not* the `cscript.exe`/Acronis noise).
 
 ---
 
@@ -567,12 +567,27 @@ index=botsv1 sourcetype=stream:smb src_ip="192.168.250.100"
 ```
 One IP dominates: **`192.168.250.20`** (~39k events) — the file server `we9041srv`. The other dest IPs are broadcast/noise.
 
-**Part 2 — how many PDFs?** ⚠️ The obvious query (`filename="*.pdf.cerber"`) returns **0**, and that's the trap: Cerber doesn't append `.cerber` to the original name — it *renames* the file to random characters, so `report.pdf` becomes something like `aB3xK9.cerber`. The `.pdf` is gone. So you can't count "encrypted PDFs" by their new names. Instead, count the **distinct PDF filenames the host touched on that share** (the SMB read traffic still carries the original names *before* encryption):
+**Part 2 — how many PDFs?** ⚠️ First trap: the obvious `filename="*.pdf.cerber"` returns **0**, because Cerber doesn't append `.cerber` to the original name — it *renames* the whole file to random characters (`report.pdf` → `aB3xK9.cerber`). The `.pdf` is gone, so you can't count encrypted PDFs by their *new* names. Instead count the distinct PDF names the host touched on the share **before** encryption — the SMB read traffic still carries them.
+
+⚠️ Second trap — **don't just wildcard `"*.pdf*"`**. That's a substring match and it grabs junk like `windows.data.pdf.dll` (a Windows system DLL, not a document). Match names that actually *end* in `.pdf`:
 ```spl
-index=botsv1 sourcetype=stream:smb dest_ip="192.168.250.20" "*.pdf*"
-| stats dc(filename) as distinct_pdfs
+index=botsv1 sourcetype=stream:smb dest_ip="192.168.250.20" filename="*.pdf"
+| stats dc(filename) as pdfs values(filename) as files
 ```
-**Answer:** File server **`192.168.250.20` (`we9041srv`)**, and **23** distinct PDFs were touched/encrypted. (For context, the encryption left **125** distinct `.cerber`-renamed files on the share.)
+**Answer:** File server **`192.168.250.20` (`we9041srv`)**, and **22** distinct PDFs were encrypted. (The loose `"*.pdf*"` reports 23 — the extra one is the `windows.data.pdf.dll` false positive. Always sanity-check *what* your wildcard matched.)
+
+**The actual files** are a numbered document repository — names like:
+```
+000\000578.pdf   004\004157.pdf   097\097040.pdf   303\303951.pdf
+317\317646.pdf   561\561054.pdf   714\714932.pdf   999\999354.pdf   … (22 total)
+```
+
+**How do you know a file is ransomware-hit (vs. a normal file)?** Three tell-tales, all visible in `stats count by filename`:
+1. **Extension `.cerber`** — Cerber's signature extension. `sourcetype=stream:smb ".cerber"` shows **125** distinct files on this share renamed to random 10-char names like `fgOZ1-mA5H.cerber`, `4Lh0bYNVMq.cerber`. Random name + `.cerber` = encrypted.
+2. **Ransom notes** dropped into every affected folder: `# DECRYPT MY FILES #.txt`, `.html`, `.url`, and `.vbs`. Search `sourcetype=stream:smb "DECRYPT"` — their presence *is* the proof of encryption.
+3. **Original names vanish** — the tidy `NNN\NNNNNN.pdf` names stop appearing after ~17:04 and are replaced by the random `.cerber` names in the same directories. That before/after flip is the encryption event itself.
+
+So the workflow is: originals (`*.pdf`, readable names) → attacker reads them → same paths reappear as random `*.cerber` + a `# DECRYPT MY FILES #` note. You count impact off the *originals*; you confirm encryption off the `.cerber` + ransom-note artifacts.
 
 ---
 
@@ -648,7 +663,7 @@ solidaritedeproximite.org at 16:48 and dropped/executed 121214.tmp (Cerber
 payload) at 16:48:21.
 
 IMPACT: encryption of bob.smith's local user profile and files on the remote
-share \\we9041srv (192.168.250.20), including 23 PDFs and other office
+share \\we9041srv (192.168.250.20), including 22 PDFs and other office
 documents (125 files renamed with the .cerber extension). The ransom note
 points to TOR gateway cerberhhyed5frqa.xmfir0.win. Dwell time: approximately
 16 minutes (16:48 -> 17:04).
