@@ -50,8 +50,8 @@ real incident.
 
 ```bash
 # Linux / macOS
-./setup.sh                   # default: BOTSv1 only
-./setup.sh --v1 --v2         # BOTSv1 + BOTSv2
+./setup.sh                   # interactive: prompts for v1 / v2 / v3 / all
+./setup.sh --v1 --v2         # BOTSv1 + BOTSv2 (flags skip the prompt)
 ./setup.sh --all             # v1 + v2 + v3
 ```
 
