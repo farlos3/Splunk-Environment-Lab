@@ -296,6 +296,6 @@ Check your work in → [SOLUTIONS.md](SOLUTIONS.md)
 ## Next Steps
 
 - Repeat the exercises in 3–7 days without looking at the solutions
-- Work through the official BOTS v1 walkthrough in [../splunk-bots/botsv1/](../splunk-bots/botsv1/)
+- Work through the official BOTS v1 walkthrough in [../splunk-bots/botsv1/](../../splunk-bots/botsv1/)
 - If you have BOTS v2 / v3, load them with `./setup.sh --v2` or `--v3` for new scenarios
 - Practice building dashboards, scheduled alerts, and saved searches from the queries you wrote here

@@ -359,7 +359,7 @@ index=botsv1 sourcetype=stream:http src_ip=192.168.250.70 http_method=GET
 ```
 The defaced file is the one being served from the web server that **doesn't match the legitimate site's image inventory**.
 
-**Answer:** `poisonivy-is-coming-for-you-batman.jpeg`. The .exe payload `3791.exe` (MD5 `ec78c938...`) was uploaded alongside it — see the [BOTS v1 official walkthrough Q109](../splunk-bots/botsv1/README.md) for the malware analysis chain.
+**Answer:** `poisonivy-is-coming-for-you-batman.jpeg`. The .exe payload `3791.exe` (MD5 `ec78c938...`) was uploaded alongside it — see the [BOTS v1 official walkthrough Q109](../../splunk-bots/botsv1/README.md) for the malware analysis chain.
 
 ---
 

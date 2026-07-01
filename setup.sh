@@ -18,7 +18,8 @@
 #   6. verify each selected app + index is visible to Splunk
 #
 # Usage:
-#   ./setup.sh                          # default: BOTSv1 only
+#   ./setup.sh                          # interactive: prompts for v1/v2/v3/all
+#                                       # (no TTY -> defaults to v1)
 #   ./setup.sh --v1 --v2                # multiple datasets
 #   ./setup.sh --all                    # v1, v2, v3
 #   ./setup.sh --v2 --skip-download     # use the .tgz already in bots-data/botsv2/
@@ -101,8 +102,37 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# Default: BOTSv1 only (preserves prior behavior)
-if ! any_selected; then SEL_V1=1; fi
+# If no dataset flags were given, ask interactively (when we have a
+# terminal). Passing --v1/--v2/--v3/--all still skips the prompt, so
+# automation/CI keeps working. With no TTY (piped input), fall back to
+# the historical default of v1 only.
+if ! any_selected; then
+    if [ -t 0 ]; then
+        echo
+        echo "Which BOTS dataset(s) do you want to set up?"
+        echo "  v1   ($SIZE_V1)   web intrusion + Cerber ransomware"
+        echo "  v2   ($SIZE_V2)  APT / advanced-threat scenario"
+        echo "  v3   ($SIZE_V3) AWS + O365 cloud / identity"
+        echo "  all  (all three)"
+        printf 'Enter choice(s) [e.g. v1 , "v1 v3", or all] (default: v1): '
+        read -r _sel
+        [ -z "$_sel" ] && _sel=v1
+        case "$_sel" in
+            a|A|all|ALL) SEL_V1=1; SEL_V2=1; SEL_V3=1 ;;
+            *)
+                case "$_sel" in *v1*|*V1*) SEL_V1=1 ;; esac
+                case "$_sel" in *v2*|*V2*) SEL_V2=1 ;; esac
+                case "$_sel" in *v3*|*V3*) SEL_V3=1 ;; esac
+                ;;
+        esac
+        if ! any_selected; then
+            echo "  (couldn't parse a selection — defaulting to v1)"
+            SEL_V1=1
+        fi
+    else
+        SEL_V1=1
+    fi
+fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="$REPO_ROOT/docker/docker-compose.yml"
