@@ -425,9 +425,4 @@ cat <<EOF
   Username : admin
   Password : $SPLUNK_PASS
 
-Sample search (set time range to 'All time'):
-  index=botsv1 earliest=0 | stats count by sourcetype
-  index=botsv2 earliest=0 | stats count by sourcetype
-  index=botsv3 earliest=0 | stats count by sourcetype
-
 EOF

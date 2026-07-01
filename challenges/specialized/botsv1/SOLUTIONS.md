@@ -126,7 +126,7 @@ Outbound was **`accept`ed** but no bulk transfer — this is **impact (T1486)**,
 - **B9 ✅** — `bob.smith` active (`4624`); no privileged (`4672`) logon in window → limited lateral risk.
 - **B10 🟡** — no `1102`/Sysmon-stop → "no anti-forensics observed" (smash-and-grab, not stealthy APT).
 - **B11 ✅** — Acronis backups present; anything backed up before 17:04:33 is restorable; re-image + restore.
-- **B12 ✅** — dwell ≈ **16.3 min** (16:48:12→17:04:33; ~21 min if `t0`=16:43 macro — state your choice). ATT&CK: T1566/T1204→T1059.005→T1547.001→T1070.004→T1071/T1568→T1021.002→T1486.
+- **B12 ✅** — dwell ≈ **16.3 min** (16:48:12→17:04:33; ~21 min if `t0`=16:43 macro — state your choice). ATT&CK: T1566/T1204→T1059.005→T1547.001→T1070.004→T1071/T1568→T1021.002→**T1490 (vssadmin/bcdedit, 16:49)**→T1486.
 ```spl
 index=botsv1 (sourcetype=stream:dns "query{}"="*solidarite*") OR (sourcetype=stream:smb ".cerber")
 | eval m=if(sourcetype=="stream:dns","t0","t1") | stats min(_time) as ts by m
@@ -171,9 +171,10 @@ index=botsv1 (sourcetype=stream:dns "query{}"="*solidarite*") OR (sourcetype=str
 - **DE10** exfil — z-score on `sum(sentbyte)` by host; near-negative in v1 → precision/baseline lesson.
 - **DE11** detection-as-code — commit SPL + a must-fire test event + a must-not-fire exclusion + ATT&CK/severity + version note.
 - **DE12** correlation — join rare DNS + Suricata + firewall on the C2 indicator within a window; multi-signal beats single-signal.
+- **DE13 ✅** Inhibit System Recovery — `CommandLine=*vssadmin*delete*shadows*` / `*bcdedit*recoveryenabled no*`; fires at 16:49:23-24, ~15 min *before* encryption → high-fidelity **early-warning** (T1490).
 
 # Track 6 — Purple Team
-- **PT1 ✅** ATT&CK layer: T1566/T1204→T1059.005→T1547.001→T1070.004→T1071/T1568→T1021.002→T1486.
+- **PT1 ✅** ATT&CK layer: T1566/T1204→T1059.005→T1547.001→T1070.004→T1071/T1568→T1021.002→**T1490**→T1486.
 - **PT2 ✅** detect coverage: T1204 (DE1), T1486 (DE2), T1547.001 (DE5) = **Detected**; T1070.004 = **Partial** (logged, no rule); T1003 = **Blind**.
 - **PT3 ✅** prevention: ASR "block Office child processes" kills T1204; egress filtering would block the C2 the firewall *accepted*; Acronis backups mitigate T1486.
 - **PT4 ✅** gap ranking: ASR (breaks chain at Execution) > egress filtering (C2) > backups (Impact/recovery only).

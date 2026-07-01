@@ -120,6 +120,17 @@ index=botsv1 sourcetype=fgt_traffic | stats sum(sentbyte) as out by srcip dstip
 **🔗 From:** DE4 · **ATT&CK:** T1071
 **Build:** don't alert on rare DNS alone — **correlate** it with an IDS hit or firewall allow to the same destination within a window. Sketch the `join`/`stats`-by-indicator logic across `stream:dns` + `suricata` + `fgt_traffic`. **Deliverable:** the correlation logic + why multi-signal beats single-signal for C2 (drowns fewer analysts).
 
+### DE13 — Inhibit System Recovery (shadow-copy destruction)
+**🔗 From:** the Q48 timeline (16:49:23–24) · **ATT&CK:** T1490
+**Build:** ransomware destroys recovery options right before encrypting — detect it.
+```spl
+index=botsv1 EventCode=1
+  (CommandLine="*vssadmin*delete*shadows*" OR CommandLine="*bcdedit*recoveryenabled no*"
+   OR CommandLine="*wbadmin*delete*" OR CommandLine="*shadowcopy*delete*")
+| table _time host User Image CommandLine
+```
+**Test:** fires on `we8105desk` at 16:49:23 (`vssadmin delete shadows /all /quiet`) and 16:49:24 (`bcdedit … recoveryenabled no`). **Why it's gold:** almost no legitimate software deletes *all* shadow copies — this is one of the **highest-fidelity, earliest** ransomware signals (it happens ~15 min *before* the first `.cerber` write, so it's a chance to respond before mass encryption). **Deliverable:** the rule + note that it's an *early-warning* detection, not a post-mortem one.
+
 ---
 
 ➡️ Reference detections & tuning notes: [SOLUTIONS.md](SOLUTIONS.md) (Track 5).

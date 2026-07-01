@@ -617,10 +617,15 @@ Times below are the **real** anchors verified against the data:
 08/24/2016 16:43:21 - Word macro fires: WINWORD.EXE -> cmd.exe -> wscript.exe 20429.vbs   [Q43]
 08/24/2016 16:48:12 - 20429.vbs resolves solidaritedeproximite.org (pulls the payload)    [Q42]
 08/24/2016 16:48:21 - 121214.tmp written to AppData\Roaming and executed (Cerber)         [Q43]
+08/24/2016 16:48:41 - osk.exe launched from AppData (persistence active; T1547.001)       [Q47]
 08/24/2016 ~16:48   - DNS lookup for cerberhhyed5frqa.xmfir0.win + Suricata C2 check-in    [Q44/Q45]
+08/24/2016 16:49:23 - vssadmin.exe delete shadows /all /quiet  (destroy backups; T1490)
+08/24/2016 16:49:24 - bcdedit /set {default} recoveryenabled no  (disable recovery; T1490)
 08/24/2016 17:04:33 - first .cerber file written on \\192.168.250.20 (encryption begins)   [Q46]
 ```
 Note the order: the **dropper executes first (16:43)**, then sleeps/loops before reaching out to its download domain at 16:48 — that's why `solidaritedeproximite.org` (Q42's "patient zero") appears *after* the initial process launch, not before.
+
+> 🔑 **Don't miss the anti-recovery stage.** At **16:49:23–24**, *before* encryption, Cerber runs `vssadmin delete shadows /all /quiet` and `bcdedit … recoveryenabled no` — **Inhibit System Recovery (T1490)**. This is *why* the victim can't just restore from Volume Shadow Copies, and it's a high-value detection point (legit software rarely deletes all shadows). A ransomware timeline that omits it is incomplete. Hunt it with: `host=we8105desk EventCode=1 (Image=*vssadmin* OR Image=*bcdedit*)`.
 Reconstruct via (note the window starts *before* 16:48 so it actually captures patient zero):
 ```spl
 index=botsv1 host=we8105desk

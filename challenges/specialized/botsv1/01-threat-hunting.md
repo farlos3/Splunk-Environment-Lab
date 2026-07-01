@@ -96,15 +96,21 @@ encrypted. Hunt the full chain from initial access to impact.* Window:
 **Hypothesis:** the payload cleans up after itself.
 **Method:** `EventCode=1 (Image="*taskkill*" OR CommandLine="*del *") CommandLine="*.tmp*"` — find the payload killing and deleting itself. (Note the `ping 127.0.0.1` sleep trick.)
 
+### B6b — Hunt "inhibit system recovery" (the early-warning stage)
+**🔗 Builds on B2** · **ATT&CK:** T1490
+**Hypothesis:** before encrypting, the payload destroys the victim's ability to recover.
+**Method:** `EventCode=1 (CommandLine="*vssadmin*delete*shadows*" OR CommandLine="*bcdedit*recoveryenabled no*" OR CommandLine="*wbadmin*delete*")`. You'll find `vssadmin delete shadows /all /quiet` (16:49:23) and `bcdedit … recoveryenabled no` (16:49:24) — **~15 minutes *before* the first `.cerber` write**. This is the highest-value early-warning signal in the whole chain: catch it and you can respond *before* mass encryption. Almost nothing legitimate deletes all shadow copies.
+**Carry forward:** the anti-recovery timestamps for the Q48/timeline.
+
 ### B7 — Hunt the impact
-**🔗 Builds on B2** · **ATT&CK:** T1021.002, T1486
+**🔗 Builds on B2/B6b** · **ATT&CK:** T1021.002, T1486
 **Hypothesis:** the host reached a file server and encrypted files there.
 **Method:** SMB sessions from the host → the server; count the **original** documents (careful: `filename="*.pdf"`, not `"*.pdf*"`); then the `.cerber` artifacts + `# DECRYPT MY FILES #` notes. Timestamp the first `.cerber` write.
 **Carry forward:** file-server IP, impact counts, encryption start time.
 
 ### B8 — Characterize exfil vs. impact + close the loop
 **🔗 Builds on B5/B7** · **ATT&CK:** T1041 vs T1486
-**Deliverable:** was data *stolen* or just *encrypted*? Check outbound volume on the firewall — here the egress is C2 signalling, not bulk theft, so this is **impact (T1486)**, not exfiltration. Then assemble the connected chain: USB/macro → LOLBin → persistence → C2 → evasion → impact.
+**Deliverable:** was data *stolen* or just *encrypted*? Check outbound volume on the firewall — here the egress is C2 signalling, not bulk theft, so this is **impact (T1486)**, not exfiltration. Then assemble the connected chain: USB/macro → LOLBin → persistence → C2 → evasion → inhibit-recovery (T1490) → impact.
 
 > **Negative checks along the way (score them too):** during Scenario B, also confirm what *didn't* happen — no event-log clearing (`1102`), no LSASS credential dumping (Sysmon EID 10), no `ADMIN$`/`C$` lateral movement (it hit a file share, not admin shares), no spread to other hosts. A documented negative is a real finding.
 

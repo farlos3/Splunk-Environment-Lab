@@ -22,18 +22,20 @@ T1547.001    Run-key osk persistence            (winregistry)
 T1070.004    self-deletion of 121214.tmp        (Sysmon)
 T1071/T1568  C2 to cerberhhyed5frqa.xmfir0.win  (dns+suricata+fgt)
 T1021.002    SMB to file server                 (stream:smb)
+T1490        vssadmin delete shadows + bcdedit  (Sysmon, 16:49:23-24)
 T1486        encryption (.cerber)               (stream:smb)
 ```
 
 ### PT2 — Coverage assessment (do we DETECT each?)
 **🔗 Builds on PT1.** **Deliverable:** for every technique, mark Detected / Partial / Blind, citing the data source or the Track-5 rule that covers it.
-- e.g. T1204 → **Detected** (DE1); T1486 → **Detected** (DE2); T1547.001 → **Detected** (DE5); T1070.004 → **Partial** (Sysmon has it but no rule yet); T1003 cred-dumping → **Blind** (EID 10 sparse).
+- e.g. T1204 → **Detected** (DE1); T1486 → **Detected** (DE2); T1547.001 → **Detected** (DE5); **T1490** (vssadmin/bcdedit) → **Partial** (Sysmon logs it, no rule yet — a high-value one to add, see DE13 below); T1070.004 → **Partial**; T1003 cred-dumping → **Blind** (EID 10 sparse).
 
 ### PT3 — Prevention assessment (could we have BLOCKED it?)
 **🔗 Builds on PT1.** **Deliverable:** for each technique, what *preventive* control applies and did we have it?
 - T1204 → Microsoft **ASR "block Office child processes"** would kill the chain at step 1.
 - T1071 C2 → **egress filtering / DNS sinkhole** — but the firewall *accepted* it (Track 3 §B5), so we didn't.
-- T1486 → **backups** (Acronis present) turn impact into recoverable.
+- T1490 → **protected/off-host backups** — Cerber runs `vssadmin delete shadows /all /quiet` + `bcdedit … recoveryenabled no`, so *local* Shadow Copies are gone; only backups the malware can't reach survive.
+- T1486 → **backups** (Acronis present) turn impact into recoverable — *if* they're off-host (see T1490).
 
 ### PT4 — Rank the gaps (earliest-break-the-chain)
 **🔗 Builds on PT2/PT3.** **Deliverable:** a prioritized list. A control that breaks the chain at **Execution** (ASR) beats one that only helps at **Impact** (backups). Rank by *how early* it stops the attack × *effort to deploy*.

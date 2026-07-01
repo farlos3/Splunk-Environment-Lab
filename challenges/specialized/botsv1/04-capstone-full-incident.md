@@ -76,7 +76,7 @@ Incident-A pivot to `08/10/2016` at the very end).
 
 ## Phase 6 — Purple-team / control validation
 **Discipline:** control assessment · **Deliverable:** ATT&CK coverage view + concrete control gaps.
-- Map the whole incident to ATT&CK (T1566/T1204 → T1059.005 → T1547.001 → T1070.004 → T1071/T1568 → T1021.002 → T1486).
+- Map the whole incident to ATT&CK (T1566/T1204 → T1059.005 → T1547.001 → T1070.004 → T1071/T1568 → T1021.002 → **T1490** → T1486).
 - For each stage, ask "what control would have broken it, and did we have it?" — e.g. Office child-process blocking (ASR) kills the chain at step 1; egress filtering would have blocked the C2 the firewall *accepted* (Phase 2 showed it didn't).
 - Deliver a short gap list ranked by where it stops the attack earliest.
 

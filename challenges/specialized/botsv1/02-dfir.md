@@ -60,7 +60,7 @@ case.* Window: `08/24/2016:00:00:00` → `08/25/2016:00:00:00`.
 **🔗 Builds on B2.** **Deliverable:** IOCs and techniques from the dropper itself. Read the raw macro/VBS; name the technique families (obfuscation, sleep-based sandbox evasion, HTTP download) without full deobfuscation.
 
 ### B5 — Payload behavioural profile
-**🔗 Builds on B4.** **Deliverable:** what the `.tmp` payload *did* — child processes, file writes, network, self-deletion — each mapped to an ATT&CK technique.
+**🔗 Builds on B4.** **Deliverable:** what the `.tmp` payload *did* — child processes, file writes, network, self-deletion, and **destruction of recovery options** (`vssadmin delete shadows /all /quiet` + `bcdedit … recoveryenabled no` at 16:49:23–24, **T1490** — a distinct pre-encryption stage; don't fold it into "encryption") — each mapped to an ATT&CK technique.
 
 ### B6 — Persistence enumeration (for eradication)
 **🔗 Builds on B2.** **Deliverable:** every autostart the attacker created (Run keys, tasks, services) so responders can remove them. Output a concrete "remove these" list.
@@ -78,7 +78,7 @@ case.* Window: `08/24/2016:00:00:00` → `08/25/2016:00:00:00`.
 **🔗 Builds on B3.** **Deliverable:** a yes/no on evidence tampering — log-clearing (`1102`), Sysmon stops, suspicious silent gaps. Likely a clean negative; document it (and what it says about adversary sophistication).
 
 ### B11 — Recovery scoping
-**🔗 Builds on B7.** **Deliverable:** what's restorable. The environment runs Acronis backups — compare backup timing vs. the encryption start; recommend re-image + restore.
+**🔗 Builds on B5/B7.** **Deliverable:** what's restorable. ⚠️ Note the T1490 step from B5: **local Volume Shadow Copies were deleted** (`vssadmin`) and Windows recovery disabled (`bcdedit`), so in-place/VSS recovery is off the table — restoration depends on **off-host Acronis backups** taken *before* 16:49. Compare backup timing vs. the encryption start; recommend re-image + restore from off-host backup.
 
 ### B12 — Metrics, ATT&CK map & report
 **🔗 Builds on B1–B11.** **Deliverable:** dwell time (`t1 − t0`, state which events you chose), the full ATT&CK technique list end-to-end, and a 5-sentence exec summary with the consolidated IOCs. Close the case.
