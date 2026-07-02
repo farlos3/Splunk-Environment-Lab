@@ -287,7 +287,11 @@ EOF
             local pct
             pct="$(awk "BEGIN {printf \"%.1f\", $LOCAL_SIZE*100/$REMOTE_SIZE}")"
             step "[$v] resuming partial download (have ${pct}% of file)"
-            curl -L --fail -C - --progress-bar -o "$TGZ" "$V_URL"
+            # curl on Git Bash is the mingw/native build (Schannel), which
+            # does NOT understand MSYS paths like /d/... — and MSYS_NO_PATHCONV
+            # (set above for docker) stops Git Bash from rewriting them. Hand
+            # curl a Windows-form path. No-op on Mac/Linux.
+            curl -L --fail -C - --progress-bar -o "$(to_winpath "$TGZ")" "$V_URL"
         else
             echo "WARNING: [$v] local file is LARGER than remote — likely corrupt." >&2
             echo "         Delete $TGZ and re-run." >&2
@@ -301,7 +305,8 @@ EOF
         TGZ="$V_DIR/bots${v}_data_set.tgz"
         step "[$v] downloading BOTS${v} ($V_SIZE)"
         info "destination: $TGZ"
-        curl -L --fail -C - --progress-bar -o "$TGZ" "$V_URL"
+        # See note above: native curl needs a Windows-form output path.
+        curl -L --fail -C - --progress-bar -o "$(to_winpath "$TGZ")" "$V_URL"
     fi
 
     step "[$v] validating archive integrity"
