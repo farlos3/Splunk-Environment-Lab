@@ -15,7 +15,7 @@ because the incidents — and therefore the hunts — are completely different.
 | Folder | Dataset | Incidents it covers | Status |
 |---|---|---|---|
 | [**botsv1/**](botsv1/) | BOTS v1 (`index=botsv1`, loaded by `./setup.sh`) | Web intrusion & defacement (2016-08-10) + Cerber ransomware (2016-08-24) | ✅ available |
-| [**botsv2/**](botsv2/) | BOTS v2 (`./setup.sh --v2`) | APT / advanced-threat scenario | 🚧 dataset loading; exercises being built (start with the [v2 fundamentals pack](../self-practice/botsv2/) first) |
+| [**botsv2/**](botsv2/) | BOTS v2 (`./setup.sh --v2`) | Taedonggang APT vs *froth.ly* (PowerShell Empire, WMI lateral, multi-OS) | ✅ available — 8 tracks + capstone (do the [v2 fundamentals pack](../self-practice/botsv2/) first) |
 | _botsv3/_ | BOTS v3 (`./setup.sh --v3`) | AWS + O365 cloud / identity incident | ⬜ not built yet |
 
 > **Why per-dataset matters for expertise:** BOTS v1 is a single on-prem,

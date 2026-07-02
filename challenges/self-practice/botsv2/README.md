@@ -4,27 +4,28 @@ A dataset-scoped learning path on `index=botsv2`, designed to take you from
 **SPL fluency** to **intensive specialized work**, the same way the v1 packs
 do — but on a richer, more advanced incident.
 
-> 📦 **Dataset: BOTS v2** (`./setup.sh --v2`). BOTS v2 is a larger, more
-> APT-flavoured scenario than v1. **Exact incidents, sourcetypes, hosts, and
-> answers are confirmed against the loaded data** before any exercise is
-> written here — nothing is guessed.
+> 📦 **Dataset: BOTS v2** (`./setup.sh --v2`) — the *froth.ly* brewery, an APT
+> scenario. Verified on load: **226M+ events · 104 sourcetypes · 23 hosts ·
+> all of August 2017**. Much richer than v1: Windows **+ Linux** + **MySQL** +
+> Apache web + **Palo Alto** firewall + Symantec EP + osquery. All exercises
+> are confirmed against the loaded data — nothing is guessed.
 
 ---
 
 ## The path (beginner → intensive)
 
-| Stage | File | Goal |
-|---|---|---|
-| **1. Fundamentals** | `01-fundamentals.md` | Get *fluent* with core SPL — `search`, `stats`, `top`/`rare`, `table`, `sort`, `dedup`, `timechart`. Speed and muscle memory first. |
-| **2. Intermediate SPL** | `02-intermediate-spl.md` | `eval` (if/case), `rex`, `tstats`/`metadata`, chaining commands, subsearches. |
-| **3. Log analysis** | `03-log-analysis.md` | Read every v2 sourcetype fluently (Windows, Sysmon, IDS, DNS, web, + whatever v2 adds). |
-| **4. Intensive specialized** | [`../specialized/botsv2/`](../../specialized/botsv2/) | Threat Hunting · DFIR · Network Forensics · Detection Engineering · Purple Team · Reporting · Threat-Intel — continuous scenarios + capstone, same rigour as [`../specialized/botsv1/`](../../specialized/botsv1/). |
+| Stage | File | Goal | Status |
+|---|---|---|---|
+| **1. Fundamentals** | [01-fundamentals.md](01-fundamentals.md) | Get *fluent* with core SPL — `search`, `stats`, `top`/`rare`, `table`, `sort`, `dedup`, `timechart`. Speed and muscle memory first. | ✅ ready |
+| **2. Intermediate SPL** | [02-intermediate-spl.md](02-intermediate-spl.md) | `eval` (if/case), `rex`, `tstats`/`metadata`, chaining, subsearches. | ✅ ready |
+| **3. Log analysis** | [03-log-analysis.md](03-log-analysis.md) | Read every v2 sourcetype fluently (Windows, Sysmon, Linux, MySQL, web, IDS, Palo Alto) — incl. which need `rex`. | ✅ ready |
+| **4. Intensive specialized** | [`../../specialized/botsv2/`](../../specialized/botsv2/) | Threat Hunting · DFIR · Network Forensics · Detection Engineering · Purple Team · Reporting · Threat-Intel — continuous scenarios + capstone, same rigour as [`botsv1`](../../specialized/botsv1/). | ✅ complete (8 tracks + capstone) |
 
 **Do them in order.** Query fluency (Stages 1–3) is the prerequisite for the
 specialized work — you can't hunt if you're still fighting the syntax.
 
-> Status: 🚧 **Being built.** Structure is fixed; exercises are populated with
-> verified queries/answers as the dataset finishes loading. Check back per stage.
+> Status: **Stage 1 ready**; later stages built next. Each exercise's answers
+> are verified against the loaded data before publishing.
 
 ---
 

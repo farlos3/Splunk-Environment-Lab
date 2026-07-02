@@ -643,7 +643,7 @@ Two bookends: `t0` = the first compromise reach-out (the `solidaritedeproximite.
 index=botsv1
   (sourcetype=stream:dns "query{}"="*solidarite*")
   OR (sourcetype=stream:smb ".cerber")
-| eval marker=if(sourcetype=="stream:dns","t0","t1")
+| eval marker=case(sourcetype=="stream:dns","t0", sourcetype=="stream:smb","t1")
 | stats min(_time) as ts by marker
 | stats min(eval(if(marker=="t0",ts,null()))) as t0
         min(eval(if(marker=="t1",ts,null()))) as t1
@@ -651,6 +651,8 @@ index=botsv1
 | eval t0=strftime(t0,"%H:%M:%S"), t1=strftime(t1,"%H:%M:%S")
 ```
 **Answer:** `t0` = **16:48:12**, `t1` = **17:04:33** → dwell time ≈ **16 minutes** (16.3 min). Cerber moves fast — initial reach-out to encryption in well under half an hour.
+
+> 🧰 **Why `case()` over `if()` for the marker:** `if(sourcetype=="stream:dns","t0","t1")` lumps *everything that isn't DNS* into `t1` — fine while the search only returns two sourcetypes, but fragile if a third ever sneaks in. `case(sourcetype=="stream:dns","t0", sourcetype=="stream:smb","t1")` labels each explicitly and returns `null` for anything unexpected (which then won't pollute your `t1`). Explicit beats "catch-all else" when the value drives a metric.
 
 > 💡 If you instead anchor `t0` to the *very first* malicious process (the Word macro / `wscript.exe` at **16:43:21**), dwell is ~21 min. Either is defensible — just state which event you called "initial compromise." That explicitness is what a Tier 2 reviewer wants.
 
