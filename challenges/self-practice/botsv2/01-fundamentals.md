@@ -68,6 +68,24 @@ Scope to a single day and use `top`.
 Extract the top-level path segment from the URI.
 **Hint:** `… | rex field=uri "^/(?<section>[^/?]+)" | top section`. `rex` is the one regex you must own — everything else is optional.
 
+### Q16 — `rare` / ascending sort: the least-common sourcetypes.
+**Hint:** `| tstats count where index=botsv2 by sourcetype | sort count | head 5`. `sort count` (no `-`) is ascending. The 1-event sourcetypes (`stream:irc`, `symantec:ep:security:file`, …) are often the *interesting* ones — the opposite instinct from "biggest first."
+
+### Q17 — Scope a count to one host, one day.
+**Hint:** `| tstats count where index=botsv2 host=cassiopeia earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00"`. `cassiopeia` alone emits ~2.5M events *in a single day* — proof of why you always scope time.
+
+### Q18 — Several aggregates in one `stats`.
+On the web logs (one day) get count + average/max/min response size together.
+**Hint:** `… sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | stats count avg(bytes) max(bytes) min(bytes)`. One `stats` can carry many functions.
+
+### Q19 — Distinct count (`dc`).
+How many *unique* client IPs hit the web server that day?
+**Hint:** `… sourcetype=access_combined earliest=… latest=… | stats dc(clientip) as clients`. (Only ~34 — a small, countable set; `dc()` is your "how many different?" tool.)
+
+### Q20 — `timechart` split by a field.
+Chart web requests per hour, split by HTTP status.
+**Hint:** `… sourcetype=access_combined earliest=… latest=… status=* | timechart span=1h count by status`. `timechart … by <field>` gives one line per value — watch the `4xx` line for scanning spikes. (Add `status=*` or the field-less rows skew it — see Stage 2.)
+
 ---
 
 **When Stage 1 feels automatic** (you reach for `tstats`/`metadata` without

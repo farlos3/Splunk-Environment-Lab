@@ -16,16 +16,17 @@ do — but on a richer, more advanced incident.
 
 | Stage | File | Goal | Status |
 |---|---|---|---|
-| **1. Fundamentals** | [01-fundamentals.md](01-fundamentals.md) | Get *fluent* with core SPL — `search`, `stats`, `top`/`rare`, `table`, `sort`, `dedup`, `timechart`. Speed and muscle memory first. | ✅ ready |
-| **2. Intermediate SPL** | [02-intermediate-spl.md](02-intermediate-spl.md) | `eval` (if/case), `rex`, `tstats`/`metadata`, chaining, subsearches. | ✅ ready |
-| **3. Log analysis** | [03-log-analysis.md](03-log-analysis.md) | Read every v2 sourcetype fluently (Windows, Sysmon, Linux, MySQL, web, IDS, Palo Alto) — incl. which need `rex`. | ✅ ready |
+| **1. Fundamentals** (Q1–20) | [01-fundamentals.md](01-fundamentals.md) | Get *fluent* with core SPL — `search`, `stats`, `top`/`rare`, `table`, `sort`, `dedup`, `timechart`. Speed and muscle memory first. | ✅ ready |
+| **2. Intermediate SPL** (Q21–40) | [02-intermediate-spl.md](02-intermediate-spl.md) | `eval` (if/case/strftime/match), `rex`, `tstats`/`metadata`, `streamstats`, chaining, subsearches. | ✅ ready |
+| **3. Log analysis** (Q41–60) | [03-log-analysis.md](03-log-analysis.md) | Read every v2 sourcetype fluently (Windows, Sysmon, Linux, MySQL, web, IDS, Palo Alto, SMTP, FTP, Symantec, osquery) — incl. which need `rex`. | ✅ ready |
 | **4. Intensive specialized** | [`../../specialized/botsv2/`](../../specialized/botsv2/) | Threat Hunting · DFIR · Network Forensics · Detection Engineering · Purple Team · Reporting · Threat-Intel — continuous scenarios + capstone, same rigour as [`botsv1`](../../specialized/botsv1/). | ✅ complete (8 tracks + capstone) |
 
 **Do them in order.** Query fluency (Stages 1–3) is the prerequisite for the
 specialized work — you can't hunt if you're still fighting the syntax.
 
-> Status: **Stage 1 ready**; later stages built next. Each exercise's answers
-> are verified against the loaded data before publishing.
+> Status: **Stages 1–3 ready (60 exercises, Q1–Q60)** — every answer verified
+> against the loaded `index=botsv2`. Stage 4 (specialized tracks) is complete
+> and lives in [`../../specialized/botsv2/`](../../specialized/botsv2/).
 
 ---
 
