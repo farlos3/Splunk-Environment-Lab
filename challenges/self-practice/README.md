@@ -7,10 +7,10 @@ different incident and therefore a different set of exercises.
 
 ## Packs by dataset
 
-| Folder | Dataset | Contents | Status |
-|---|---|---|---|
-| [**botsv1/**](botsv1/) | BOTS v1 (`./setup.sh`) | 60 exercises Q1–Q60: SPL fundamentals → log analysis → SOC Tier-1 investigations → Enterprise Security, with [SOLUTIONS](botsv1/SOLUTIONS.md) | ✅ complete |
-| [**botsv2/**](botsv2/) | BOTS v2 (`./setup.sh --v2`) | Graduated path: fundamentals → intermediate SPL → log analysis (query fluency first) | 🚧 dataset loading; being built |
+| Folder | Dataset | Contents |
+|---|---|---|
+| [**botsv1/**](botsv1/) | BOTS v1 (`./setup.sh`) | 67 exercises Q1–Q67: SPL fundamentals → log analysis → SOC Tier-1 investigations → CIM & Enterprise Security, with [SOLUTIONS](botsv1/SOLUTIONS.md) |
+| [**botsv2/**](botsv2/) | BOTS v2 (`./setup.sh --v2`) | Graduated path: fundamentals → intermediate SPL → log analysis (query fluency first) |
 
 ## The learning journey
 

@@ -14,7 +14,7 @@
 > | Section 2 Q27–Q30 | `8/24/2016 00:00:00` → `8/25/2016 00:00:00` |
 > | Scenario A (Q31–Q40) | `8/10/2016 00:00:00` → `8/12/2016 00:00:00` |
 > | Scenario B (Q41–Q50) | `8/24/2016 00:00:00` → `8/25/2016 00:00:00` |
-> | Section 4 (Q51–Q60)  | Per question — Scenario A or B window |
+> | Section 4 (Q51–Q67)  | Per question — Scenario A or B window |
 
 ---
 
@@ -689,11 +689,36 @@ IOCs delivered to Tier 2:
 
 ---
 
-# Section 4 — Enterprise Security Workflow
+# Section 4 — CIM, Data Models & the Enterprise Security Workflow
 
-> Prerequisite: CIM app installed (lightweight path) or ES trial installed (full path). See [04-enterprise-security.md](04-enterprise-security.md) for setup. Q53, Q58–Q60 also assume you've created `index=notable` and `index=risk` under *Settings → Indexes*.
+> Prerequisite: CIM app installed (lightweight path) or ES trial installed (full path). See [04-enterprise-security.md](04-enterprise-security.md) for setup. **Part 1 (Q51–Q60)** only needs the CIM app + accelerated data models. **Part 2 (Q61–Q67)** additionally assumes you've created `index=notable` and `index=risk` under *Settings → Indexes*.
+>
+> Every Part-1 model query includes a raw-SPL fallback — if a data model returns zero rows, the sourcetype isn't CIM-tagged (missing TA), not a bug in your SPL.
 
 ### Q51
+```spl
+| datamodel
+```
+Lists every data model the CIM app installed. For acceleration status and backfill range:
+```spl
+| rest /services/datamodel/model
+| table title acceleration.enabled acceleration.earliest_time
+```
+For Part 1 you want `Authentication`, `Web`, and `Network_Traffic` showing `acceleration.enabled = 1`. If they read `0`, go back to Prerequisites step 4 and enable acceleration — otherwise every `tstats summariesonly=t` below returns nothing.
+
+---
+
+### Q52
+```spl
+| datamodel Authentication Authentication search
+| head 10
+| table _time sourcetype user action src dest app
+```
+Syntax is `| datamodel <Model> <Dataset> search`. On BOTS v1 the `sourcetype` column should read `WinEventLog:Security`; `user` is the account (raw `TargetUserName`); `action` is `success`/`failure` (derived from EventCode 4624/4625). Zero rows ⇒ `Splunk_TA_windows` isn't installed/tagging — same root cause you'll dissect in Q60.
+
+---
+
+### Q53
 ```spl
 | from datamodel:"Authentication"
 | search action="failure"
@@ -709,7 +734,24 @@ and then ask yourself: "what's missing for CIM to recognize this?"
 
 ---
 
-### Q52
+### Q54
+Outcome split:
+```spl
+| from datamodel:"Authentication"
+| stats count by action
+```
+Two rows — `success` and `failure`. Then the noisiest failure sources:
+```spl
+| from datamodel:"Authentication"
+| search action="failure"
+| stats count by src
+| sort - count | head 5
+```
+The top `src` is the brute-force origin — the same host you fingered in Section 3, found here without touching a single EventCode. Raw fallback: `... EventCode=4625 | stats count by Source_Network_Address`.
+
+---
+
+### Q55
 ```spl
 | tstats summariesonly=t count
     FROM datamodel=Authentication
@@ -718,11 +760,50 @@ and then ask yourself: "what's missing for CIM to recognize this?"
 | rename Authentication.user as user
 | sort - count | head 10
 ```
-Same answer as Q51, runs in ~milliseconds against the accelerated DM instead of seconds. The risk of `summariesonly=t`: if acceleration is paused or behind, you silently get an *incomplete* answer with no warning. Set `summariesonly=f` when you're unsure.
+Same answer as Q53, runs in ~milliseconds against the accelerated DM instead of seconds. The risk of `summariesonly=t`: if acceleration is paused or behind, you silently get an *incomplete* answer with no warning. Set `summariesonly=f` when you're unsure (that's Q60).
 
 ---
 
-### Q53
+### Q56
+```spl
+| tstats summariesonly=t count
+    FROM datamodel=Authentication
+    WHERE Authentication.action="failure"
+    BY _time span=1h
+```
+`tstats ... BY _time span=1h` returns time-bucketed rows — switch to the **Visualization** tab → Line to see the brute-force hour spike. Split per targeted host:
+```spl
+| tstats summariesonly=t count
+    FROM datamodel=Authentication
+    WHERE Authentication.action="failure"
+    BY _time span=1h Authentication.dest
+```
+This is the exact shape ES uses to render dashboard panels quickly.
+
+---
+
+### Q57
+Top URLs:
+```spl
+| tstats summariesonly=t count
+    FROM datamodel=Web
+    WHERE Web.dest="192.168.250.70"
+    BY Web.url
+| rename Web.url as url
+| sort - count | head 10
+```
+Status breakdown:
+```spl
+| tstats summariesonly=t count
+    FROM datamodel=Web
+    WHERE Web.dest="192.168.250.70"
+    BY Web.status
+```
+Expect a flood from the Acunetix scan plus the brute-force POSTs, with a mix of `200`/`302`/`404`. Raw fallback: `index=botsv1 sourcetype=stream:http dest_ip="192.168.250.70" | top url`.
+
+---
+
+### Q58
 ```spl
 | tstats summariesonly=t sum(All_Traffic.bytes_out) as bytes_out
     FROM datamodel=Network_Traffic
@@ -731,7 +812,7 @@ Same answer as Q51, runs in ~milliseconds against the accelerated DM instead of 
 | rename All_Traffic.src as src
 | sort - bytes_out | head 10
 ```
-The attacker IP from Section 3 (`23.22.63.114`) should dominate. If `Network_Traffic` returns nothing, BOTS v1's `stream:ip` isn't CIM-tagged — use the raw fallback:
+The attacker IP from Section 3 (`23.22.63.114`) should dominate. Note the root dataset is `All_Traffic`, not `Network_Traffic`. If `Network_Traffic` returns nothing, BOTS v1's `stream:ip` isn't CIM-tagged — use the raw fallback:
 ```spl
 index=botsv1 sourcetype=stream:ip dest_ip="192.168.250.70"
 | stats sum(bytes_out) as bytes_out by src_ip
@@ -740,7 +821,40 @@ index=botsv1 sourcetype=stream:ip dest_ip="192.168.250.70"
 
 ---
 
-### Q54
+### Q59
+```spl
+| tstats summariesonly=t count dc(All_Traffic.dest_port) as distinct_ports
+    FROM datamodel=Network_Traffic
+    WHERE All_Traffic.dest_ip="192.168.250.70"
+    BY All_Traffic.src
+| rename All_Traffic.src as src
+| sort - count | head 10
+```
+The attacker IP dominates by `count`, but its `distinct_ports` stays low (mostly 80/443) — that reads as "hammering the web service," not a port sweep. A source with high `distinct_ports` would be the scanner. Raw fallback: `sourcetype=stream:ip dest_ip="192.168.250.70" | stats count dc(dest_port) as distinct_ports by src_ip`.
+
+---
+
+### Q60
+Data model (accelerated summaries only) vs raw:
+```spl
+| tstats summariesonly=t count
+    FROM datamodel=Authentication
+    WHERE Authentication.action="failure"
+```
+```spl
+index=botsv1 sourcetype=WinEventLog:Security EventCode=4625 | stats count
+```
+If the DM number is lower, re-run with `summariesonly=f`:
+```spl
+| tstats summariesonly=f count
+    FROM datamodel=Authentication
+    WHERE Authentication.action="failure"
+```
+`summariesonly=f` fills the un-accelerated gap from raw events, so it should match the raw count; `=t` reads only pre-built summaries and lags while acceleration catches up. A gap that *persists even with `=f`* means the sourcetype isn't tagged into the model at all (TA missing) — the model literally can't see those events. Reconciling `=t`, `=f`, and raw is the habit that stops you shipping a detection that silently misses half its data.
+
+---
+
+### Q61
 ```spl
 index=botsv1 sourcetype=stream:http
 | eval is_sqli = if(match(uri, "(?i)(union|select|0x|%27|--)"), 1, 0)
@@ -758,9 +872,9 @@ Expected hit: `23.22.63.114` → `192.168.250.70` with `signature="Web Scanner A
 
 ---
 
-### Q55
+### Q62
 ```spl
-<Q54 search>
+<Q61 search>
 | eval rule_name        = signature,
        rule_id          = case(sqli_hits >= 5, "WEB-SQLI-001",
                                true(),         "WEB-SCAN-001"),
@@ -776,7 +890,7 @@ index=notable rule_id IN ("WEB-SQLI-001", "WEB-SCAN-001")
 
 ---
 
-### Q56
+### Q63
 ```spl
 index=notable
 | stats earliest(_time) as first_seen,
@@ -791,7 +905,7 @@ This is the SPL behind ES's *Incident Review* page — one row per unique notabl
 
 ---
 
-### Q57
+### Q64
 ```spl
 index=notable
 | bin span=1h _time as window
@@ -808,7 +922,7 @@ index=notable
 
 ---
 
-### Q58
+### Q65
 Drive-by domain hit:
 ```spl
 index=botsv1 sourcetype=stream:http site="*solidaritedeproximite.org*"
@@ -838,7 +952,7 @@ index=risk | stats sum(risk_score) by risk_object source_rule
 
 ---
 
-### Q59
+### Q66
 ```spl
 index=risk
 | stats sum(risk_score)       as total_risk,
@@ -851,11 +965,11 @@ index=risk
 | convert ctime(last_seen)
 | sort - total_risk
 ```
-After Q58, `we8105desk` should appear with `total_risk = 90` (30 + 60) and `distinct_rules = 2` — a single high-confidence "ransomware on we8105desk" incident instead of dozens of noisy single-signal alerts. *This is the whole point of RBA.*
+After Q65, `we8105desk` should appear with `total_risk = 90` (30 + 60) and `distinct_rules = 2` — a single high-confidence "ransomware on we8105desk" incident instead of dozens of noisy single-signal alerts. *This is the whole point of RBA.*
 
 ---
 
-### Q60
+### Q67
 ```csv
 host,ip,criticality,owner,business_unit
 imreallynotbatman.com,192.168.250.70,critical,batman,marketing
@@ -887,6 +1001,6 @@ Now an analyst sees not just `dest=192.168.250.70` but `criticality=critical, bu
 3. **Try BOTS v2 and v3** — `./setup.sh --v2` or `--v3` for fresh scenarios
 4. **Convert your best queries into dashboards** — save each as a panel
 5. **Write a real alert** — schedule a search that triggers when, for example, 4625 fires more than 10 times per minute from a single IP
-6. **Schedule your Section 4 detections** — turn each `| collect` query into a saved search with a cron and let `index=notable` / `index=risk` build up over multiple days; then re-run Q56–Q57 and Q59 to see real triage data
+6. **Schedule your Section 4 detections** — turn each `| collect` query into a saved search with a cron and let `index=notable` / `index=risk` build up over multiple days; then re-run Q63–Q64 and Q66 to see real triage data
 
 Happy hunting.

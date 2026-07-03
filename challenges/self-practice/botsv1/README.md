@@ -1,6 +1,6 @@
 # Self-Practice: Splunk + SOC Tier 1 + Enterprise Security
 
-A set of **60 hands-on exercises** for practicing SPL (Splunk Search Processing
+A set of **67 hands-on exercises** for practicing SPL (Splunk Search Processing
 Language), core SOC Tier 1 analyst skills, and the Splunk Enterprise Security
 workflow, progressing from beginner to advanced. All exercises use the
 **BOTS v1** dataset (the default loaded by `setup.sh`).
@@ -9,7 +9,7 @@ workflow, progressing from beginner to advanced. All exercises use the
 
 ## Learning Objectives
 
-After completing all 60 exercises, you should be able to:
+After completing all 67 exercises, you should be able to:
 - Write SPL to search, filter, aggregate, and visualize events fluently
 - Read logs from the key security sourcetypes — Windows, Sysmon, Suricata IDS, DNS, web
 - Answer SOC Tier 1 triage questions (Who? What? When? Where? How?)
@@ -26,7 +26,7 @@ After completing all 60 exercises, you should be able to:
 | [01-splunk-fundamentals.md](01-splunk-fundamentals.md) | Beginner | Q1–Q15 | SPL syntax: search, stats, top, table, eval, rex |
 | [02-security-log-analysis.md](02-security-log-analysis.md) | Beginner–Intermediate | Q16–Q30 | Windows / Sysmon / Suricata / DNS / web log reading |
 | [03-soc-tier1-investigations.md](03-soc-tier1-investigations.md) | Intermediate | Q31–Q50 | Brute force, web breach, ransomware, IOCs, timeline |
-| [04-enterprise-security.md](04-enterprise-security.md) | Advanced | Q51–Q60 | CIM data models, correlation searches, notable events, RBA, asset & identity |
+| [04-enterprise-security.md](04-enterprise-security.md) | Intermediate–Advanced | Q51–Q67 | **Part 1 (Q51–Q60):** CIM data models — discover, explore, query (`from datamodel:` / `tstats`), verify. **Part 2 (Q61–Q67):** correlation searches, notable events, RBA, asset & identity |
 | [SOLUTIONS.md](SOLUTIONS.md) | — | — | Reference answers with SPL and explanations |
 
 ---
@@ -53,7 +53,7 @@ contains the events you need — keep searches fast and focused on practice:
 | **Section 2: Q27–Q30** (PowerShell, registry, network conns) | `8/24/2016 00:00:00` → `8/25/2016 00:00:00` | Ransomware day — Sysmon-rich activity |
 | **Scenario A — Web defacement** (Q31–Q40) | `8/10/2016 00:00:00` → `8/12/2016 00:00:00` | Covers full attack chain |
 | **Scenario B — Ransomware** (Q41–Q50) | `8/24/2016 00:00:00` → `8/25/2016 00:00:00` | The Cerber infection window |
-| **Section 4 — ES workflow** (Q51–Q60) | Same as Scenarios A/B above (per question) | Re-uses Section 3's attack windows |
+| **Section 4 — CIM & ES workflow** (Q51–Q67) | Same as Scenarios A/B above (per question) | Re-uses Section 3's attack windows |
 
 You can either set the time picker manually (Date Range → Between) or
 inline it in SPL:
@@ -121,6 +121,19 @@ earliest=0                            # epoch 0 — equivalent to "All time"
 - **Time matters** — always order events on a timeline before forming a story
 
 ---
+
+## After this pack — Specialized tracks
+
+Once you're fluent with these 67 exercises, move on to the **specialized BOTS v1
+tracks** in [`../../specialized/botsv1/`](../../specialized/botsv1/). Those are
+methodology-driven — instead of "find the one answer," each hands you a
+hypothesis or a case and grades the *process*. **8 tracks**: Threat Hunting ·
+DFIR · Network Forensics · Detection Engineering · Purple Team · Reporting ·
+Threat-Intel, all tied together by a full-incident
+[capstone](../../specialized/botsv1/04-capstone-full-incident.md).
+
+> Rule of thumb: finish self-practice before specialized — you can't hunt if
+> you're still fighting the syntax.
 
 ## Credits
 
