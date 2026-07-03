@@ -618,10 +618,12 @@ Times below are the **real** anchors verified against the data:
 08/24/2016 16:48:12 - 20429.vbs resolves solidaritedeproximite.org (pulls the payload)    [Q42]
 08/24/2016 16:48:21 - 121214.tmp written to AppData\Roaming and executed (Cerber)         [Q43]
 08/24/2016 16:48:41 - osk.exe launched from AppData (persistence active; T1547.001)       [Q47]
-08/24/2016 ~16:48   - DNS lookup for cerberhhyed5frqa.xmfir0.win + Suricata C2 check-in    [Q44/Q45]
+08/24/2016 16:49:24 - Suricata Cerber "Checkin 2" sig 2816763 fires (C2 check-in)          [Q44]
 08/24/2016 16:49:23 - vssadmin.exe delete shadows /all /quiet  (destroy backups; T1490)
 08/24/2016 16:49:24 - bcdedit /set {default} recoveryenabled no  (disable recovery; T1490)
 08/24/2016 17:04:33 - first .cerber file written on \\192.168.250.20 (encryption begins)   [Q46]
+08/24/2016 17:15:12 - DNS lookup cerberhhyed5frqa.xmfir0.win + Suricata Onion Domain Lookup
+                      sig 2820156 (ransom portal, end of encryption phase)                 [Q45]
 ```
 Note the order: the **dropper executes first (16:43)**, then sleeps/loops before reaching out to its download domain at 16:48 — that's why `solidaritedeproximite.org` (Q42's "patient zero") appears *after* the initial process launch, not before.
 

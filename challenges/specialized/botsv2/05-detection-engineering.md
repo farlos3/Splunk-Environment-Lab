@@ -55,7 +55,7 @@ Threshold on failures/5-min per source. Pair with an "Accepted password" join to
 index=botsv2 sourcetype=suricata (alert.category="A Network Trojan was detected" OR alert.signature="*Backdoor*")
 | stats count by src_ip alert.signature
 ```
-For hosts without an endpoint agent (the Mac), IDS category is your detection. Fires on Quimitchin from `10.0.4.2`.
+The Mac (`kutekitten`) has osquery but no behavioural EDR, so the IDS category is what *alerts*; confirm the malware on-host via `osquery_results`. Fires on Quimitchin from `10.0.4.2`.
 
 ### DE7 — Tooling drop via msiexec from temp
 **🔗 From:** Track 1 A6 · **ATT&CK:** T1105

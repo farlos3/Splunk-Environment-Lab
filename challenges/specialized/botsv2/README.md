@@ -25,10 +25,10 @@ v1's smash-and-grab, this is a slow, multi-surface intrusion. Verified anchors:
 | Tooling dropped | `msiexec /i c:\temp\download\python.msi /qn` |
 | Workstation | `wrk-btun` = user **`FROTHLY\billy.tun`** (heavy `iexplore.exe` — browser activity) |
 | Linux | SSH **brute force** on `gacrux` from China IPs (`58.242.83.20` 26k, `116.31.116.17`, …); a **successful** `Accepted password for klager from 71.39.18.125` |
-| macOS | **`ET TROJAN OSX Backdoor Quimitchin`** DNS lookup from `10.0.4.2` (the `maclory-air13` Mac) → `10.0.1.100` |
+| macOS | **`ET TROJAN OSX Backdoor Quimitchin`** DNS lookup from `10.0.4.2` (the `kutekitten` Mac) → `10.0.1.100` |
 | Other IDS | port-135 scanning, TOR relay traffic, vulnerable Java |
 
-**Environment:** 23 hosts — servers `cassiopeia` (MySQL DB, ~61M events), `venus`, `jupiter`, `mercury`, `gacrux` (Linux); workstations `wrk-btun/ghoppy/aturing/klagerf/abungst/fmaltes/bgist`; `maclory-air13` (Mac).
+**Environment:** 23 hosts — servers `cassiopeia` (MySQL DB, ~61M events), `venus`, `jupiter`, `mercury`, `gacrux` (Linux); workstations `wrk-btun/ghoppy/aturing/klagerf/abungst/fmaltes/bgist`; Macs `maclory-air13` + `kutekitten` (`10.0.4.2`, the Quimitchin host).
 
 ---
 

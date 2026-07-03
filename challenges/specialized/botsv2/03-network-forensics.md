@@ -40,7 +40,7 @@ time / use `tstats` — 226M events.
 
 ### N7 — The macOS backdoor on the wire
 **🔗 parallel** · **ATT&CK:** T1071 · **Data:** `suricata`, `stream:dns`
-**Method:** `sourcetype=suricata "Quimitchin"` (category *A Network Trojan was detected*) from `10.0.4.2`; pivot `stream:dns src_ip=10.0.4.2` for the domains it resolved. IDS/DNS are your *only* view of the Mac (no endpoint agent).
+**Method:** `sourcetype=suricata "Quimitchin"` (category *A Network Trojan was detected*) from `10.0.4.2`; pivot `stream:dns src_ip=10.0.4.2` for the domains it resolved. IDS/DNS surface it on the wire; `osquery_results` on `kutekitten` (`10.0.4.2`) is the on-host confirmation.
 
 ### N8 — Exfil assessment + single-pane correlation (capstone)
 **🔗 Builds on N2/N3** · **ATT&CK:** T1041

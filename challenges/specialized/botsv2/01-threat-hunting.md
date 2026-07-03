@@ -70,7 +70,7 @@ practice separating internet background noise from the real intrusion.*
 
 ### B3 — Hunt the macOS backdoor
 **🔗 parallel foothold** · **ATT&CK:** T1071 · **Data:** `suricata`, `stream:dns`
-**Hypothesis:** the Mac (`maclory-air13`) is compromised too.
+**Hypothesis:** the Mac (`kutekitten`, `10.0.4.2`) is compromised too.
 **Method:** `sourcetype=suricata "Quimitchin"` (aka FruitFly, a macOS backdoor) — a DNS-lookup signature from `10.0.4.2` → `10.0.1.100`. Pivot: `sourcetype=stream:dns src_ip=10.0.4.2` for the domains it resolved. This is a *separate* malware family from the Windows Empire agent.
 
 ### B4 — Tie the campaign together

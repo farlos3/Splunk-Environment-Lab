@@ -14,7 +14,7 @@ Every step **builds on** the last. Scope raw searches to the active window
 ---
 
 ### D0 — Evidence acquisition & coverage
-**Deliverable:** the telemetry inventory + gaps. `| metadata type=sourcetypes index=botsv2`. Note the breadth (Windows 4688/Sysmon, Linux syslog/auditd, macOS-via-IDS, PAN firewall, Suricata, Stream, MySQL) and the gaps (macOS has *no* endpoint agent — you only see it via network/IDS; PAN/Linux need `rex`).
+**Deliverable:** the telemetry inventory + gaps. `| metadata type=sourcetypes index=botsv2`. Note the breadth (Windows 4688/Sysmon, Linux syslog/auditd, macOS osquery, PAN firewall, Suricata, Stream, MySQL) and the gaps (the Mac has **osquery but no real-time EDR** — IDS surfaces the backdoor and osquery confirms it on-host; PAN/Linux need `rex`).
 
 ### D1 — Scope & patient zero
 **🔗 Builds on D0.** **Deliverable:** which hosts are involved and the *earliest* malicious action. Enumerate internal hosts beaconing to the C2 and their first-seen times. The earliest C2 contact (not the noisiest host) is your `t0` — beware assuming the day everything "blew up" was the start.
@@ -38,7 +38,7 @@ Every step **builds on** the last. Scope raw searches to the active window
 **🔗 Builds on D2.** **Deliverable:** how the actor moved host-to-host. The `WmiPrvSE.exe` parent (D2) = WMI lateral execution (T1047). Look for the credential source (which account ran the WMI) and other WMI-spawned processes across hosts.
 
 ### D8 — Multi-OS scope
-**🔗 Builds on D1.** **Deliverable:** the non-Windows footholds. Linux: separate the SSH brute-force noise from the *successful* `klager` login (`gacrux`). macOS: the Quimitchin backdoor on the Mac (`10.0.4.2`) — visible only via IDS/DNS (no endpoint agent). State confidence on whether each belongs to the campaign.
+**🔗 Builds on D1.** **Deliverable:** the non-Windows footholds. Linux: separate the SSH brute-force noise from the *successful* `klager` login (`gacrux`). macOS: the Quimitchin backdoor on **`kutekitten`** (`10.0.4.2`) — IDS/DNS flag it on the wire and `osquery_results` on that host confirms the malware file/hash. State confidence on whether each belongs to the campaign.
 
 ### D9 — Account & credential impact
 **🔗 Builds on D7.** **Deliverable:** which accounts were used/abused (`FROTHLY\billy.tun`, `amber.turing`, `klager`, SYSTEM via the task). Any privileged accounts? What's the credential-exposure blast radius?

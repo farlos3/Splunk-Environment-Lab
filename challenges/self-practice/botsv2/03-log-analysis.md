@@ -75,7 +75,7 @@ Pick a process-creation moment on a workstation and view it from *both* `wineven
 For `wrk-bgist`, pull a slice of Sysmon + wineventlog + stream:dns in one window and read the story. **Hint:** `index=botsv2 host=wrk-bgist (sourcetype=*ysmon* OR sourcetype=wineventlog:security OR sourcetype=stream:dns) earliest=… latest=… | sort _time | table _time sourcetype EventCode Image query{}`.
 
 ### Q43 — Which host is which? Build an asset picture
-**Hint:** `| tstats count where index=botsv2 by host sourcetype`, then infer roles: `cassiopeia`/`venus`/`jupiter` (servers — perfmon/mysql/pan), `wrk-*` (workstations — Sysmon), `maclory-air13` (the Mac — the OSX backdoor host).
+**Hint:** `| tstats count where index=botsv2 by host sourcetype`, then infer roles: `cassiopeia`/`venus`/`jupiter` (servers — perfmon/mysql/pan), `wrk-*` (workstations — Sysmon), and two Macs `maclory-air13` + `kutekitten` (both carry `osquery_results`) — `kutekitten` (`10.0.4.2`) is the OSX-backdoor host.
 
 ---
 

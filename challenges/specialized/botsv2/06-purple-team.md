@@ -24,7 +24,7 @@ T1071 (macOS) Quimitchin backdoor                    Suricata (10.0.4.2)
 ```
 
 ### PT2 — Detect coverage
-**🔗 Builds on PT1.** For each, mark Detected / Partial / Blind + the Track-5 rule. e.g. T1059.001→Detected (DE1); T1047→Detected (DE2); T1053.005→Detected (DE3); T1071 C2→Detected (DE4); T1110→Detected (DE5); Quimitchin→Partial (IDS only, DE6); registry payload→Partial (no rule on the reg write).
+**🔗 Builds on PT1.** For each, mark Detected / Partial / Blind + the Track-5 rule. e.g. T1059.001→Detected (DE1); T1047→Detected (DE2); T1053.005→Detected (DE3); T1071 C2→Detected (DE4); T1110→Detected (DE5); Quimitchin→Partial (IDS alert + osquery confirmation, no real-time EDR; DE6); registry payload→Partial (no rule on the reg write).
 
 ### PT3 — Prevention assessment
 **🔗 Builds on PT1.** Per technique, the preventive control: T1059.001 → Constrained Language Mode / AMSI + PowerShell logging; T1047 → restrict WMI/RPC + host firewall; T1110 → key-only SSH + fail2ban; T1071 → egress filtering / TLS inspection (the C2 was on 443 and *allowed out*).
@@ -33,7 +33,7 @@ T1071 (macOS) Quimitchin backdoor                    Suricata (10.0.4.2)
 **🔗 Builds on PT2/PT3.** Rank by earliest-break-the-chain × effort. Blocking WMI lateral (T1047) or egress to unknown 443 destinations stops the campaign earlier than detecting persistence after the fact.
 
 ### PT5 — The macOS / multi-OS blind spot
-**🔗 Builds on PT2.** Key APT lesson: the Mac has **no endpoint agent** — you only saw Quimitchin via network IDS. Deliverable: a coverage-gap statement + recommendation (deploy macOS EDR/osquery; the env already has osquery on some hosts — extend it).
+**🔗 Builds on PT2.** Key APT lesson: the Mac (`kutekitten`) runs **osquery but no real-time EDR** — IDS *alerted* on Quimitchin and osquery *confirms* the malware file/hash on-host, but nothing did behavioural detection in between. Deliverable: a coverage-gap statement + recommendation (add macOS behavioural EDR, or turn the existing osquery into scheduled detections).
 
 ### PT6 — Coverage matrix (deliverable)
 **🔗 Builds on all.** Technique × Detect? / Prevent? / Gap / Recommendation — the artifact for leadership. Emphasize where an APT slips through *because* controls are per-OS and inconsistent.

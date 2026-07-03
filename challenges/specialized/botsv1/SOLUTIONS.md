@@ -24,16 +24,23 @@ Perimeter noise (denied, distributed — e.g. `192.254.66.174` 9,641 SSH denies)
 
 ### A2 ✅ Credential attack
 ```spl
-index=botsv1 sourcetype=stream:http dest_ip="192.168.250.70" http_method=POST | stats count by src_ip http_user_agent
+index=botsv1 sourcetype=stream:http dest_ip="192.168.250.70" http_method=POST
+| stats count by src_ip http_user_agent
+index=botsv1 sourcetype=stream:http dest_ip="192.168.250.70" http_method=POST form_data=*passwd*
+| stats count by src_ip http_user_agent
 ```
-`40.80.148.42`, single fixed UA `Mozilla/5.0 (Windows NT 6.1; WOW64) … Chrome/41.0.2228.0 Safari/537.21`, thousands of POSTs (T1110). `| timechart span=1m count` shows machine-gun regularity → automation, not a human.
+Two POST sources, two different jobs — don't conflate them:
+- **`40.80.148.42`** (UA `…Chrome/41.0.2228.0…`) makes the *bulk* ~12.8k POSTs, but only **one** carries a `passwd` — that's the **Acunetix scanner** fuzzing forms, not a login attack.
+- **`23.22.63.114`** (UA `Python-urllib/2.7`) makes **412** POSTs to `/joomla/administrator/index.php`, **every one** carrying a distinct `passwd` — *this* is the credential brute force (T1110). `| timechart span=1m count` on this IP shows the machine-gun cadence.
+
+Gate on `form_data=*passwd*` to isolate the real credential attack; ranking raw POST volume alone points you at the scanner by mistake.
 
 ### A3 ✅ Exploitation attempts
 ```spl
 index=botsv1 sourcetype=stream:http dest_ip="192.168.250.70" (uri="*union*" OR uri="*select*" OR uri="*'*" OR uri="*..%2f*")
 | stats count by src_ip
 ```
-Injection markers from **`40.80.148.42`** (~5,556) and **`23.22.63.114`** (~823) — same actors, so the web attack is multi-technique (T1190 + T1110), not a spray.
+Injection markers come almost entirely from **`40.80.148.42`** (~600 — the scanner also probing SQLi/traversal); the credential brute-forcer `23.22.63.114` sticks to login POSTs. So the campaign is multi-technique — recon + SQLi/traversal (T1190) from the scanner **and** the credential brute force (T1110) from the Python client — one group, two tools.
 
 ### A4 ✅ Upload / web shell
 ```spl
@@ -41,11 +48,14 @@ index=botsv1 sourcetype=stream:http dest_ip="192.168.250.70" http_method=POST pa
 ```
 `40.80.148.42` uploaded **`agent.php`** and **`joomla.json`** — the access→action boundary (T1505.003).
 
-### A5 ✅ Second actor
-Review post-access UAs: **`23.22.63.114`** with `Python-urllib/2.7` is the hands-on-keyboard operator, distinct from the brute-force automation.
+### A5 ✅ Two actors / two tools
+The campaign runs from **two distinct sources with two different tools** — don't collapse them:
+- **`40.80.148.42`** — Acunetix scanner (Chrome/41 UA): recon, SQLi, **and** the hands-on finish — the single successful `batman` login plus the `agent.php`/`joomla.json` upload (A4).
+- **`23.22.63.114`** — `Python-urllib/2.7`: the automated credential brute force that *found* `batman`.
+The User-Agent is the tell — a fixed Chrome string vs. a scripting library. Same group (Po1s0n1vy), split labour.
 
 ### A6 ✅ Attribution & IOCs
-Campaign = **Po1s0n1vy** APT (defacement theme). IOCs: attacker IPs `40.80.148.42`, `23.22.63.114`; UAs `Chrome/41.0.2228.0`, `Python-urllib/2.7`; uploads `agent.php`, `joomla.json`; target `192.168.250.70`. Connected story: recon → brute force → SQLi → upload → operator → attribution.
+Campaign = **Po1s0n1vy** APT (defacement theme). IOCs: attacker IPs `40.80.148.42`, `23.22.63.114`; UAs `Chrome/41.0.2228.0`, `Python-urllib/2.7`; uploads `agent.php`, `joomla.json`; target `192.168.250.70`. Connected story: scan/recon + SQLi (`40.80.148.42`, Acunetix) → credential brute force (`23.22.63.114`, Python-urllib, cracks `batman`) → login with cracked creds + web-shell upload (`40.80.148.42`) → defacement.
 
 ## Scenario B — Patient Zero: The Ransomware Outbreak
 
@@ -108,8 +118,8 @@ Outbound was **`accept`ed** but no bulk transfer — this is **impact (T1486)**,
 
 ## Case A — Web Server Intrusion
 - **A1 ✅ Scope** — asset `192.168.250.70`; attacker `40.80.148.42` over HTTP; unknowns = access method + action.
-- **A2 ✅ Root cause** — brute-forced CMS admin (one UA, ~12.8k POSTs) + SQLi probing; root cause = internet-exposed admin with a guessable password.
-- **A3 ✅ Action-on-objective** — uploads `agent.php`/`joomla.json`; second actor `23.22.63.114` drives the operator stage / defacement.
+- **A2 ✅ Root cause** — the ~12.8k POSTs from `40.80.148.42` are the **Acunetix scanner** (only one carries a password); the real credential brute force is **`23.22.63.114`** (`Python-urllib`, 412 password POSTs to the Joomla admin login). Root cause = an internet-exposed CMS admin with a guessable password (`batman`).
+- **A3 ✅ Action-on-objective** — `40.80.148.42` uses the cracked `batman` login (its single `passwd` POST) to upload `agent.php`/`joomla.json` → defacement. Two source IPs, one campaign, two tools (Acunetix scanner+uploader vs. the Python brute-forcer).
 - **A4 ✅ Attribution** — **Po1s0n1vy** APT, high confidence (defacement theme + attacker IP).
 - **A5 — Report/control** — exec summary + earliest-breaking control = account lockout / rate-limit + WAF at the credential-attack stage.
 
@@ -140,7 +150,7 @@ index=botsv1 (sourcetype=stream:dns "query{}"="*solidarite*") OR (sourcetype=str
 
 ## Scenario A — Anatomy of the Web Attack
 - **A1 ✅** — `fgt_traffic | stats sum(sentbyte) by srcip dstip` (fields `srcip`/`dstip`/`sentbyte`); top external talker to `192.168.250.70` = `40.80.148.42`.
-- **A2 ✅** — HTTP brute force `40.80.148.42`, fixed UA `Chrome/41.0.2228.0`, machine-gun `timechart` cadence.
+- **A2 ✅** — the credential brute force on the wire is **`23.22.63.114`** (`Python-urllib/2.7`), 412 password POSTs to `/joomla/administrator/index.php` at machine-gun `timechart` cadence. `40.80.148.42`'s larger POST volume is the Acunetix scanner (Chrome/41 UA), not a login attack — split them with `form_data=*passwd*`.
 - **A3 ✅** — `stats count by status` shows error/probe spikes; injection markers in URIs (union/select/`'`/`..%2f`); a `200` after failures = success.
 - **A4 ✅** — uploads `agent.php`, `joomla.json` via `part_filename`.
 - **A5 🟡** — `iis` vs `stream:http` counts differ (server-side app log vs. raw wire) — explain the delta, don't "reconcile to equal."
@@ -161,7 +171,7 @@ index=botsv1 (sourcetype=stream:dns "query{}"="*solidarite*") OR (sourcetype=str
 # Track 5 — Detection Engineering
 - **DE1 ✅** Office→script-host (SPL in the capstone Phase 5 below). High-signal: Acronis/Nessus noise has non-Office parents. Map T1204.002→T1059.
 - **DE2 ✅** mass-rename threshold: `stream:smb ".cerber" | bin _time span=1m | stats dc(filename) by _time src_ip | where files>10`. Behaviour-based → catches any encryptor; tune threshold vs. bulk-copy FPs.
-- **DE3 ✅** brute force: POST rate to `192.168.250.70` with `dc(http_user_agent)=1` isolates automation (`40.80.148.42`).
+- **DE3 ✅** brute force: a high `passwd`-POST rate to `/joomla/administrator/index.php` from a single `Python-urllib` UA isolates the credential attack (`23.22.63.114`). Gate on `form_data=*passwd*` so the Acunetix scanner's form-fuzz POSTs (`40.80.148.42`) don't inflate the signal.
 - **DE4 ✅** C2: newly-seen `query{}` **joined** with a Suricata/firewall hit — single-signal rare-domain alone is too noisy for a SOC.
 - **DE5 ✅** persistence: `winregistry …\Run` new `SetValue`; allow-list `internat.exe`, alert on `osk`.
 - **DE6** operationalize: backtest each rule (fires only in the incident window), attach notable metadata (title/ATT&CK/severity), prefer RBA risk-scoring on `host`/`user` over raw alerts.

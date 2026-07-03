@@ -279,7 +279,7 @@ index=botsv2 host=wrk-bgist (sourcetype=*ysmon* OR sourcetype=wineventlog:securi
 ```spl
 | tstats count where index=botsv2 by host sourcetype
 ```
-Servers: `cassiopeia` (MySQL/DB), `venus`/`jupiter`/`mercury` (perfmon/pan), `gacrux` (Linux/SSH). Workstations: `wrk-*` (Sysmon/winregistry). `maclory-air13` = the Mac (the `10.0.4.2` host that made the Quimitchin backdoor lookup).
+Servers: `cassiopeia` (MySQL/DB), `venus`/`jupiter`/`mercury` (perfmon/pan), `gacrux` (Linux/SSH). Workstations: `wrk-*` (Sysmon/winregistry). Two Macs — `maclory-air13` and `kutekitten` (both carry `osquery_results`); **`kutekitten`** is the `10.0.4.2` host that made the Quimitchin backdoor lookup.
 
 ---
 

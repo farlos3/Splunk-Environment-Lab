@@ -46,7 +46,7 @@ Everything below is real activity in `index=botsv1`. Both tracks reuse them.
 
 **Incident A — Web server intrusion & defacement (2016-08-10)**
 - Target: `imreallynotbatman.com` web server at **`192.168.250.70`**
-- Attacker (Po1s0n1vy APT): brute force from **`40.80.148.42`**, later dynamic-content / defacement from **`23.22.63.114`**
+- Attacker (Po1s0n1vy APT), two tools: Acunetix scan + SQLi + the web-shell upload and successful `batman` login from **`40.80.148.42`** (Chrome/41 UA); the credential **brute force** from **`23.22.63.114`** (`Python-urllib`, 412 password POSTs)
 - Time window: `08/10/2016:00:00:00` → `08/11/2016:00:00:00`
 
 **Incident B — Cerber ransomware (2016-08-24)**

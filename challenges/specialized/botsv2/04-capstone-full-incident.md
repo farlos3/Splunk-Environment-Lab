@@ -37,7 +37,7 @@ Root cause + master timeline: **first C2 Aug 15**, Empire on venus **Aug 24 03:5
 Generalize the findings into rules: Empire `-enc` PowerShell, **PowerShell-parented-by-WMI** (the highest-value lateral detection), schtasks-SYSTEM-encoded persistence, multi-signal C2 beacon, SSH brute, IDS trojan category. Tune + write metadata; prefer **RBA** (an APT trips many low-confidence rules — risk-score the host).
 
 ## Phase 6 — Purple team (Track 6)
-ATT&CK-map the incident; build the detect-vs-prevent matrix; rank control gaps (WMI lateral + egress filtering break the chain earliest); flag the **macOS blind spot** (no endpoint agent).
+ATT&CK-map the incident; build the detect-vs-prevent matrix; rank control gaps (WMI lateral + egress filtering break the chain earliest); flag the **macOS gap** (osquery present but no real-time EDR — detection was IDS-first).
 
 ## Phase 7 — Reporting (Track 7)
 Exec summary + **dwell time (~9 days — the APT hallmark)** + IOC package + lessons. Contrast with v1: here the value isn't a 16-minute timeline, it's explaining a *long, quiet* dwell across surfaces.

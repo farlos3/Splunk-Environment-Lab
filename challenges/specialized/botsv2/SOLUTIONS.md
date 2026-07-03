@@ -67,7 +67,7 @@ index=botsv2 sourcetype=linux_secure "Accepted password"
 ```spl
 index=botsv2 sourcetype=suricata "Quimitchin" | stats count by src_ip dest_ip
 ```
-`ET TROJAN OSX Backdoor Quimitchin DNS Lookup` from **`10.0.4.2`** (the `maclory-air13` Mac) → `10.0.1.100`. Quimitchin/FruitFly = a macOS backdoor — a separate malware family from the Windows Empire agent.
+`ET TROJAN OSX Backdoor Quimitchin DNS Lookup` from **`10.0.4.2`** (the **`kutekitten`** Mac — it references `10.0.4.2` in its own netstat/osquery) → `10.0.1.100`. Quimitchin/FruitFly = a macOS backdoor — a separate malware family from the Windows Empire agent. (Note: `kutekitten` runs `osquery`, so the malware file/hash is also confirmable on-host — see PT5.)
 
 ### B4 — Campaign linkage
 **Deliverable:** the Windows Empire foothold (**venus + wrk-btun + wrk-klagerf**, foothold `billy.tun`→lateral `service3`, C2 `45.77.65.211`) is the core Taedonggang intrusion; the macOS Quimitchin activity is a distinct foothold to assess on its own; the internet SSH brute force is **background noise** (not the APT). State which share infra/timing vs. which don't — don't fold noise into the campaign.
@@ -76,7 +76,7 @@ index=botsv2 sourcetype=suricata "Quimitchin" | stats count by src_ip dest_ip
 
 # Track 2 — DFIR
 
-- **D0 ✅** `| metadata type=sourcetypes index=botsv2` → Windows (4688/Sysmon), Linux (syslog/auditd), PAN, Suricata, Stream, MySQL. Gaps: **macOS has no endpoint agent** (seen only via IDS/DNS); PAN/Linux need `rex`.
+- **D0 ✅** `| metadata type=sourcetypes index=botsv2` → Windows (4688/Sysmon), Linux (syslog/auditd), macOS (osquery), PAN, Suricata, Stream, MySQL. Gaps: **the Mac has osquery but no real-time EDR** (IDS surfaces the backdoor, osquery confirms it on-host); PAN/Linux need `rex`.
 - **D1 ✅** internal hosts beaconing C2 `45.77.65.211` with first-seen:
   ```spl
   index=botsv2 sourcetype=pan:traffic "45.77.65.211" | rex ",(?<sip>10\.0\.\d+\.\d+),(?<dip>[^,]+)," | search dip="45.77.65.211"
@@ -89,7 +89,7 @@ index=botsv2 sourcetype=suricata "Quimitchin" | stats count by src_ip dest_ip
 - **D5 ✅** eradication: remove task **`Updater`** + registry value `HKLM:\Software\Microsoft\Network debug`; sweep the pattern on all beaconing hosts.
 - **D6 ✅** blast radius: **network view** = 4 internal IPs beaconing C2 (`10.0.2.107/109`, `10.0.1.100/101`); **confirmed-compromised (Empire agent present)** = **`venus`, `wrk-btun`, `wrk-klagerf`** (3 hosts, verified via the `-enc` search).
 - **D7 ✅** lateral = WMI (`WmiPrvSE.exe`, T1047); the account behind it is **`FROTHLY\service3`** (ran the Empire on venus + wrk-klagerf) — reset it.
-- **D8 ✅** multi-OS: Linux `Accepted password for klager from 71.39.18.125` (vs. brute-force noise `58.242.83.20` etc.); macOS Quimitchin from `10.0.4.2` (IDS-only).
+- **D8 ✅** multi-OS: Linux `Accepted password for klager from 71.39.18.125` (vs. brute-force noise `58.242.83.20` etc.); macOS Quimitchin from `10.0.4.2` = **`kutekitten`** (IDS alert + on-host `osquery` confirmation).
 - **D9 ✅** accounts: `FROTHLY\billy.tun` (foothold, wrk-btun), **`FROTHLY\service3`** (lateral cred → venus + wrk-klagerf), `amber.turing` (PAN), `klager` (Linux), SYSTEM (the task).
 - **D10 ✅ (qualitative)** exfil: traffic to C2 is **asymmetric — received > sent** (inbound tasking dominates; a naive positional `rex` on the PAN CSV byte columns is unreliable — it returned `sent=0`, so don't quote a byte number without the proper Palo Alto field parser). Evidence points to **C2 signalling/tasking, not bulk data theft** — state it that way, don't over-claim exfil.
 - **D11** containment: isolate compromised hosts, block `45.77.65.211`, remove `Updater`+registry, reset abused creds, handle Linux/macOS separately.
@@ -146,7 +146,7 @@ index=botsv2 sourcetype=linux_secure "Failed password"
 ```spl
 index=botsv2 sourcetype=suricata alert.category="A Network Trojan was detected" | stats count by src_ip alert.signature
 ```
-Fires on **Quimitchin** from `10.0.4.2`. **Why it matters:** the Mac has no endpoint agent, so the **IDS category is your only detector** — this is how you cover an agentless host.
+Fires on **Quimitchin** from `10.0.4.2` (`kutekitten`). **Why it matters:** the Mac runs `osquery` but no behavioural EDR, so the **IDS category is what *alerts*** — you then confirm the malware file/hash on-host via `osquery_results`. This is how you cover a host that has query-based telemetry but no real-time detection.
 
 ### DE7 ✅ Tooling drop via msiexec (T1105)
 ```spl
@@ -177,7 +177,7 @@ T1071(mac)  Quimitchin backdoor (10.0.4.2)         Suricata (DE6)
 ```
 
 ### PT2 ✅ Detect coverage
-Detected: T1059.001 (DE1), T1047 (DE2), T1053.005 (DE3), T1071 C2 (DE4), T1110 (DE5), macOS trojan (DE6), T1105 (DE7). **Partial/Blind:** the **registry-payload write** (T1547) — the task action references it but there's no rule on the reg `SetValue`; and **macOS host-level** activity (IDS-only, no agent).
+Detected: T1059.001 (DE1), T1047 (DE2), T1053.005 (DE3), T1071 C2 (DE4), T1110 (DE5), macOS trojan (DE6), T1105 (DE7). **Partial/Blind:** the **registry-payload write** (T1547) — the task action references it but there's no rule on the reg `SetValue`; and **macOS host-level** behavioural detection (osquery is present for on-host confirmation, but nothing alerts in real time).
 
 ### PT3 ✅ Prevention assessment
 T1059.001 → Constrained Language Mode + AMSI + script-block logging; T1047 → restrict WMI/RPC + host firewall (the lateral vector); T1110 → key-only SSH + fail2ban; T1071 → **egress filtering / TLS inspection** (the C2 walked out on 443 unimpeded); T1053.005 → block non-admin task creation.
@@ -186,7 +186,7 @@ T1059.001 → Constrained Language Mode + AMSI + script-block logging; T1047 →
 Earliest-break-the-chain × effort: (1) **restrict WMI lateral** (T1047) — kills the spread to venus/wrk-klagerf; (2) **egress filtering** to unknown 443 dsts — cuts the C2; (3) AMSI/CLM — blunts the agent; backups/response come later. Detecting persistence is *after* the fact — prevention upstream beats it.
 
 ### PT5 ✅ The macOS / multi-OS blind spot
-`maclory-air13` has **no endpoint agent** — Quimitchin was visible only via network IDS. Recommendation: deploy macOS EDR / extend **osquery** (already present on some hosts) to the Mac. This inconsistent per-OS coverage is *how* an APT slips through.
+`kutekitten` runs **osquery but no real-time EDR** — IDS *alerted* on Quimitchin and osquery *confirms* the malware file/hash on-host (that's exactly how the official BOTS walkthrough IDs the `fpsaud`/FruitFly malware — via `osquery_results host=kutekitten`), but nothing did behavioural detection in between. Recommendation: add macOS behavioural EDR, or convert the existing osquery into scheduled detections. This inconsistent per-OS coverage is *how* an APT slips through.
 
 ### PT6 — Coverage matrix (deliverable)
 Technique × Detect? / Prevent? / Gap / Recommendation — the leadership artifact, emphasizing the WMI + egress gaps and the macOS blind spot.
