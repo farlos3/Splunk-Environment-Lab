@@ -22,10 +22,14 @@ fields out of it*. Crucial lesson up front:
 | `linux_secure`, `auditd` | syslog text | ❌ no | **`rex`** the message |
 | `mysql:*`, `osquery_results` | JSON/mixed | ⚠️ JSON → `spath` | `spath`, or read `_raw` then `rex` |
 
-> ⏱ **Time picker for Stage 3** (depends on the source you're reading):
-> - Windows endpoint / Sysmon (Q41–Q43): `08/24/2017 00:00:00` → `08/25/2017 00:00:00`
-> - Web / DNS / IDS / Palo Alto (Q44–Q47): `08/23/2017 00:00:00` → `08/24/2017 00:00:00`
-> - APT artifacts (Q54–Q60: SMTP, FTP, registry, osquery, C2): `08/15/2017 00:00:00` → `08/26/2017 00:00:00`
+⏱ **Time picker — Stage 3** (depends on the source you're reading)
+
+| Questions | Time picker |
+|---|---|
+| Q41–Q43 (Windows endpoint / Sysmon) | `08/24/2017 00:00:00` → `08/25/2017 00:00:00` |
+| Q44–Q47 (web / DNS / IDS / Palo Alto) | `08/23/2017 00:00:00` → `08/24/2017 00:00:00` |
+| Q48–Q53 (Linux SSH / MySQL / correlation) | single day, e.g. `08/24/2017 00:00:00` → `08/25/2017 00:00:00` (or `tstats` for counts) |
+| Q54–Q60 (APT artifacts: SMTP/FTP/registry/osquery/C2) | `08/15/2017 00:00:00` → `08/26/2017 00:00:00` |
 
 > Solutions: [SOLUTIONS.md](SOLUTIONS.md) (Stage 3). v2 is 226M events — always scope, or use `tstats`/keyword searches.
 

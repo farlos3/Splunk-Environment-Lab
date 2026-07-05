@@ -15,9 +15,12 @@ environment — Windows + Linux + MySQL + web + Palo Alto firewall.
 > `earliest=`/`latest=` (a single day) on raw searches. If a search hangs,
 > you forgot to scope it.
 
-> ⏱ **Time picker for Stage 1.** Discovery questions (Q1–Q6, Q16–Q17) use
-> `tstats`/`metadata` — no window needed. For the web questions (Q7–Q20) set
-> the picker to `08/23/2017 00:00:00` → `08/24/2017 00:00:00`.
+⏱ **Time picker — Stage 1**
+
+| Questions | Time picker |
+|---|---|
+| Q1–Q6, Q16–Q17 (discovery) | none needed — use `tstats` / `metadata` |
+| Q7–Q20 (web) | `08/23/2017 00:00:00` → `08/24/2017 00:00:00` |
 
 > Solutions: [SOLUTIONS.md](SOLUTIONS.md) (Stage 1 section).
 

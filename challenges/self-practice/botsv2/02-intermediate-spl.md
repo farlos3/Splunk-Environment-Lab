@@ -7,9 +7,12 @@ with subsearches. These are the building blocks every hunt in Stage 4 leans on.
 **Still scope your time** (v2 = 226M events). Use a single August-2017 day
 for raw searches; use `tstats`/`metadata` when you only need counts.
 
-> ⏱ **Time picker for Stage 2.** These drills lean on the web logs — set the
-> picker to `08/23/2017 00:00:00` → `08/24/2017 00:00:00` (Q40's SQLi flag
-> spans the attack, `08/23/2017 00:00:00` → `08/26/2017 00:00:00`).
+⏱ **Time picker — Stage 2**
+
+| Questions | Time picker |
+|---|---|
+| Q21–Q39 (web logs) | `08/23/2017 00:00:00` → `08/24/2017 00:00:00` |
+| Q40 (SQLi flag — spans the attack) | `08/23/2017 00:00:00` → `08/26/2017 00:00:00` |
 
 > Solutions: [SOLUTIONS.md](SOLUTIONS.md) (Stage 2 section).
 
