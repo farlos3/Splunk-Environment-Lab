@@ -4,7 +4,20 @@ Reference answers, verified against the loaded `index=botsv2`. Fundamentals
 are about *fluency*, so for many the "answer" is the query + the shape of the
 result, not a single magic number.
 
-> Time picker: v2 spans **all of August 2017**. Scope raw searches to a day.
+> **Time picker.** v2 spans **all of August 2017** (`08/01/2017` → `08/31/2017`),
+> but the activity is concentrated. Set the window to match what you're
+> searching — a wrong picker returns *zero results* and fools you. For counting
+> or discovery use `tstats`/`metadata` (no window needed — reads the index, not raw events).
+>
+> | What you're searching | Time picker (set "Between" in the UI) |
+> |---|---|
+> | Web / brewertalk (`access_combined`, SQLi, scan) | `08/23/2017 00:00:00` → `08/24/2017 00:00:00` |
+> | Windows endpoint / Sysmon (4688, EID 1, Empire exec) | `08/24/2017 00:00:00` → `08/25/2017 00:00:00` |
+> | APT artifacts (C2, phishing, FTP drop, registry, osquery) | `08/15/2017 00:00:00` → `08/26/2017 00:00:00` |
+> | Counting / discovery (`tstats`, `metadata`) | any / All time — it's fast |
+>
+> Inline equivalent in SPL uses a colon between date and time:
+> `earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"`.
 
 ---
 

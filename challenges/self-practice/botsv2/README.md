@@ -37,6 +37,30 @@ specialized work — you can't hunt if you're still fighting the syntax.
 
 ---
 
+## Time picker — IMPORTANT
+
+v2 spans **all of August 2017** (`08/01/2017` → `08/31/2017`), but real activity
+is concentrated. Set the window to match what you're searching — a wrong picker
+returns *zero results*, not an error. For counting/discovery use
+`tstats`/`metadata` (no window needed).
+
+| What you're searching | Time picker (set "Between" in the UI) |
+|---|---|
+| Web / brewertalk (`access_combined`, SQLi, scan) | `08/23/2017 00:00:00` → `08/24/2017 00:00:00` |
+| Windows endpoint / Sysmon (4688, EID 1, Empire exec) | `08/24/2017 00:00:00` → `08/25/2017 00:00:00` |
+| APT artifacts (C2, phishing, FTP drop, registry, osquery) | `08/15/2017 00:00:00` → `08/26/2017 00:00:00` |
+| Counting / discovery (`tstats`, `metadata`) | any / All time — it's fast |
+
+Inline in SPL, the same window uses a **colon** between date and time:
+```spl
+… earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+```
+
+> ⚠️ Always scope raw searches to a day — a bare `index=botsv2` over All time
+> scans 226M events and can OOM the lab.
+
+---
+
 ## SPL cheat sheet (read before Stage 1)
 
 ```spl
