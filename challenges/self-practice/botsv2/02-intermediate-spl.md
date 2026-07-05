@@ -14,7 +14,9 @@ for raw searches; use `tstats`/`metadata` when you only need counts.
 | Q21–Q39 (web logs) | `08/23/2017 00:00:00` → `08/24/2017 00:00:00` |
 | Q40 (SQLi flag — spans the attack) | `08/23/2017 00:00:00` → `08/26/2017 00:00:00` |
 
-> Solutions: [SOLUTIONS.md](SOLUTIONS.md) (Stage 2 section).
+> **Hints are nudges, not answers** — they point at the commands and shape.
+> Write the SPL yourself; the full query + verified result is in
+> [SOLUTIONS.md](SOLUTIONS.md) (Stage 2), for a last resort.
 
 ---
 
@@ -22,98 +24,91 @@ for raw searches; use `tstats`/`metadata` when you only need counts.
 
 ### Q21 — Calculated field + rounding
 On the web logs, turn `bytes` into KB and show the biggest responses.
-**Hint:** `… sourcetype=access_combined earliest=… latest=… | eval kb=round(bytes/1024,1) | sort - kb | table _time clientip uri kb`.
+**Hint:** `eval` a new `kb` field with `round(bytes/1024,1)`, `sort` descending on it, then `table` the columns you want.
 
 ### Q22 — `case()` to classify HTTP status
 Bucket every request into 2xx/3xx/4xx/5xx and count each.
-**Hint:** `| eval class=case(status<300,"2xx",status<400,"3xx",status<500,"4xx",true(),"5xx") | stats count by class`. `case()` beats nested `if()` once you have 3+ buckets. ⚠️ Mind the `true()` catch-all with null `status` — see Q37.
+**Hint:** `eval` a `class` field with `case(status<300,"2xx", status<400,"3xx", …)`, then `stats count by class`. `case()` beats nested `if()` once you have 3+ buckets. ⚠️ The `true()` catch-all silently swallows null `status` — see Q37.
 
 ### Q23 — Conditional counting with `eval` inside `stats`
 Count errors vs. total per client in one pass.
-**Hint:** `| stats count as total count(eval(status>=400)) as errors by clientip | eval err_rate=round(errors/total*100,1) | sort - err_rate`. A high error rate from one IP = scanning/brute force.
+**Hint:** Inside one `stats`, put a plain `count` (total) next to `count(eval(status>=400))` (just the errors), grouped by `clientip`; then `eval` an `err_rate`. One pass, no subsearch. A high error rate from one IP = scanning/brute force.
 
 ### Q24 — String functions
 Extract the host portion of the `Referer`/`useragent`, or lowercase a field for consistent grouping.
-**Hint:** `| eval ua=lower(useragent) | stats count by ua`. Explore `len()`, `substr()`, `lower()`, `mvindex()`.
+**Hint:** `eval` with `lower(useragent)` normalizes case before you `stats count by` it. Explore `len()`, `substr()`, `lower()`, `mvindex()`.
 
 ## `rex` — extract what isn't a field yet
 
 ### Q25 — Named-group extraction from a URI
 Pull the first path segment and any query parameter.
-**Hint:** `| rex field=uri "^/(?<section>[^/?]+)"` then `| rex field=uri "[?&]id=(?<id>[^&]+)"`. Own this pattern — it's how you field-ify raw logs.
+**Hint:** Two `rex field=uri` passes — one named group capturing the first `/segment`, one capturing the value after `id=`. Own this pattern — it's how you field-ify raw logs.
 
 ### Q26 — `rex` on Sysmon CommandLine
 On `sourcetype=*ysmon*` EventCode=1, extract the executable name out of `Image`.
-**Hint:** `| rex field=Image "\\\\(?<exe>[^\\\\]+)$" | top exe`. (Backslashes in Windows paths need escaping in the regex.)
+**Hint:** `rex field=Image` capturing everything after the last backslash, then `top` the result. The gotcha: backslashes are regex-special *and* SPL-string-special, so they need double-escaping.
 
 ### Q27 — `rex` mode=sed to redact/normalize
 Mask everything after `?` in a URI for cleaner grouping.
-**Hint:** `| rex field=uri mode=sed "s/\?.*//" | stats count by uri`.
+**Hint:** `rex ... mode=sed` with a substitution that deletes from `?` to end, then `stats count by uri` — collapses `/x?id=1` and `/x?id=2` into `/x`.
 
 ## `tstats` / `metadata` — fast at scale
 
 ### Q28 — `tstats` with a time chart
 Count events per hour for a sourcetype *without* a slow raw search.
-**Hint:** `| tstats count where index=botsv2 sourcetype=suricata by _time span=1h`. `tstats` reads the indexed fields — orders of magnitude faster on 226M events.
+**Hint:** `tstats count … by _time span=1h`. `tstats` reads the indexed fields — orders of magnitude faster than a raw `timechart` on 226M events.
 
 ### Q29 — `metadata` for recon
 When did each sourcetype first and last appear?
-**Hint:** `| metadata type=sourcetypes index=botsv2 | eval firstTime=strftime(firstTime,"%F %T"), lastTime=strftime(lastTime,"%F %T") | table sourcetype totalCount firstTime lastTime recentTime`.
+**Hint:** `metadata type=sourcetypes index=botsv2`, then `strftime` the `firstTime`/`lastTime` epoch fields so they're readable.
 
 ### Q30 — `tstats` grouped by two fields
 Events by host **and** sourcetype, to see which host owns which telemetry.
-**Hint:** `| tstats count where index=botsv2 by host sourcetype | sort - count`.
+**Hint:** `tstats count … by host sourcetype`, `sort` descending.
 
 ## Chaining & combining
 
 ### Q31 — Subsearch: pivot from one sourcetype to another
 Find DNS queries made by whatever host was noisiest in Sysmon.
-**Hint:**
-```spl
-index=botsv2 sourcetype=stream:dns [
-  | tstats count where index=botsv2 sourcetype=*ysmon* by host
-  | sort - count | head 1 | fields host ]
-| stats count by query{}
-```
-The subsearch returns the top host and injects it as a filter. Keep subsearches small (they're capped).
+**Hint:** A subsearch in `[ … ]` runs *first* and returns a filter. Put a `tstats … by host | sort - count | head 1 | fields host` inside so it resolves the top Sysmon host and injects it into the outer `stream:dns` search. Keep subsearches small — they're row/time-capped.
 
 ### Q32 — `stats` then `eval` then `where`
 Find clients whose error rate is high **and** volume is non-trivial.
-**Hint:** `… | stats count as total count(eval(status>=400)) as errors by clientip | eval rate=errors/total | where total>100 AND rate>0.5`.
+**Hint:** Build the same error-rate `stats` as Q23, then `where` filters *after* aggregation on the computed fields (e.g. `total>100 AND rate>0.5`) — different from `search`, which filters raw events before `stats`.
 
 ### Q33 — `eventstats` / `streamstats` for baselining
 Flag requests from a client whose per-minute rate is far above the average.
-**Hint:** `… | bin _time span=1m | stats count by _time clientip | eventstats avg(count) as avg stdev(count) as sd | where count > avg + 3*sd`. This z-score pattern is the seed of an anomaly detection (Stage 4).
+**Hint:** `bin _time span=1m`, `stats count by _time clientip`, then `eventstats avg`/`stdev` to add the baseline onto *every* row so you can `where count > avg + 3*sd`. That z-score is the seed of an anomaly detection (Stage 4).
 
 ### Q34 — `transaction` vs `stats` (know when to use which)
 Group a client's requests into sessions by a 5-minute gap.
-**Hint:** `… | transaction clientip maxpause=5m | eval dur=duration, n=eventcount`. Then reflect: `stats` is faster/cheaper — use `transaction` only when you truly need event grouping/ordering.
+**Hint:** `transaction clientip maxpause=5m` groups events into sessions with `duration`/`eventcount`. Then reflect: `stats` is faster/cheaper — reach for `transaction` only when you truly need event grouping/ordering.
 
 ### Q35 — `lookup`-style enrichment with `iplocation`
 Geo-locate the top external web clients.
-**Hint:** `… sourcetype=access_combined earliest=… latest=… | iplocation clientip | stats count by clientip Country City | sort - count`. Foreign, high-volume clients are worth a second look.
+**Hint:** `iplocation clientip` adds `Country`/`City` fields; `stats count by` them and `sort`. Foreign, high-volume clients are worth a second look.
 
 ## More `eval` / aggregation drills
 
 ### Q36 — Time-of-day with `strftime`
 Which hour of the day is busiest on the web server? Derive the hour from `_time`.
-**Hint:** `… sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | eval hour=strftime(_time,"%H") | stats count by hour | sort - count`. (`strptime` is the inverse — string → epoch.)
+**Hint:** `eval hour=strftime(_time,"%H")`, then `stats count by hour | sort - count`. (`strptime` is the inverse — string → epoch.)
 
 ### Q37 — Null-field awareness (a real v2 trap)
 Not every `access_combined` event has a `status`. Count how many are **missing** it.
-**Hint:** `… sourcetype=access_combined earliest=… latest=… | stats count(status) as have count as total | eval missing=total-have`. `count(field)` counts only rows where the field exists; `count` counts all. The gap (~41,742 that day) is why `stats count by status` and a `case()`/`true()` catch-all silently mislead — always gate on `status=*` when the value drives a metric.
+**Hint:** `count(status)` counts only rows where the field exists; a plain `count` counts all — subtract to get the missing total. That gap (~41,742 that day) is exactly why `stats count by status` and a `case()`/`true()` catch-all (Q22) silently mislead — gate on `status=*` when the value drives a metric.
 
 ### Q38 — `values()` + `dc()` together
 For each web client, list the HTTP methods it used and how many distinct URIs it touched — a one-line scanner profile.
-**Hint:** `… sourcetype=access_combined earliest=… latest=… | stats dc(uri) as uris values(method) as methods count by clientip | sort - uris`. A client with a high `uris` and both `GET`+`POST` is crawling the app.
+**Hint:** One `stats` by `clientip` carrying `dc(uri)`, `values(method)`, and `count`; `sort` by the distinct-URI count. A client with high `uris` and both `GET`+`POST` is crawling the app.
 
 ### Q39 — `streamstats` running total
 Add a cumulative event count over time (unlike `eventstats`, which adds one global aggregate to every row).
-**Hint:** `… sourcetype=access_combined earliest=… latest=… | bin _time span=1h | stats count by _time | streamstats sum(count) as running_total`. `streamstats` computes *as it walks the rows* — great for running totals / "first N so far" logic.
+**Hint:** `bin` into hourly buckets, `stats count by _time`, then `streamstats sum(count)` for a cumulative column. `streamstats` computes *as it walks the rows* — great for running totals / "first N so far" logic.
 
 ### Q40 — `match()` to build a boolean flag
 Flag SQL-injection-looking requests to `www.brewertalk.com` from the scanner and count them.
-**Hint:** `… sourcetype=stream:http src_ip="45.77.65.211" earliest="08/23/2017:00:00:00" latest="08/26/2017:00:00:00" | eval sqli=if(match(form_data,"(?i)updatexml|union.*select"),1,0) | stats sum(sqli) as sqli_hits count`. `match(field,"regex")` returns true/false — pair it with `if()`+`sum()` to count matches. (~136 hits — the `updatexml` MySQL-error-based injection on `/member.php`.)
+**Hint:** Scope to the scanner's `src_ip` first, then `eval` a flag with `if(match(form_data,"(?i)updatexml|union.*select"),1,0)` and `sum()` it. `match(field,"regex")` returns true/false. ⚠️ Scope to the attacker IP — `match()` over the whole web index drowns in noise and can misfire on a multivalue `form_data`. (~136 hits — the `updatexml` error-based injection on `/member.php`.)
 
 ---
 

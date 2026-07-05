@@ -22,76 +22,78 @@ environment — Windows + Linux + MySQL + web + Palo Alto firewall.
 | Q1–Q6, Q16–Q17 (discovery) | none needed — use `tstats` / `metadata` |
 | Q7–Q20 (web) | `08/23/2017 00:00:00` → `08/24/2017 00:00:00` |
 
-> Solutions: [SOLUTIONS.md](SOLUTIONS.md) (Stage 1 section).
+> **Hints are nudges, not answers** — they name the approach and the commands
+> to reach for. Try to write the SPL yourself; the full query + verified result
+> is in [SOLUTIONS.md](SOLUTIONS.md) (Stage 1), for a last resort.
 
 ---
 
 ### Q1 — What sourcetypes exist, and which are biggest?
 Use the *fast* path (metadata/tstats), not a raw search.
-**Hint:** `| tstats count where index=botsv2 by sourcetype | sort - count`.
+**Hint:** `tstats` counts straight from the index without scanning raw events. Aggregate `count` by `sourcetype`, then `sort` descending.
 
 ### Q2 — How many total events are in the index?
-**Hint:** `| tstats count where index=botsv2`. Compare the speed vs. `index=botsv2 | stats count` (don't actually wait for the slow one).
+**Hint:** `tstats count` with no `by` clause returns the grand total instantly. (Picture the raw `| stats count` alternative — then don't run it; it would scan all 226M events.)
 
 ### Q3 — How many *distinct* sourcetypes and hosts?
-**Hint:** `| tstats dc(sourcetype) dc(host) where index=botsv2`.
+**Hint:** One `tstats` can carry two distinct-counts at once — `dc(sourcetype)` and `dc(host)`.
 
 ### Q4 — What is the dataset's time span?
-**Hint:** `| tstats min(_time) as first max(_time) as last where index=botsv2 | eval first=strftime(first,"%F %T"), last=strftime(last,"%F %T")`.
+**Hint:** `tstats min(_time)` and `max(_time)`; those come back as epoch numbers, so wrap each in `strftime(…,"%F %T")` to read them.
 
 ### Q5 — List the hosts, busiest first.
-**Hint:** `| tstats count where index=botsv2 by host | sort - count`. Notice the naming: `wrk-*` = workstations, single words (`cassiopeia`, `venus`) = servers, `maclory-air13` = a Mac.
+**Hint:** `tstats count by host`, `sort` descending. Read the naming as you go: `wrk-*` = workstations, single words (`cassiopeia`, `venus`) = servers, and two Macs stand out.
 
 ### Q6 — Which sourcetypes does one host emit?
 Pick a workstation, e.g. `wrk-ghoppy`.
-**Hint:** `| tstats count where index=botsv2 host=wrk-ghoppy by sourcetype | sort - count`.
+**Hint:** Same shape as Q1 (`tstats count by sourcetype`) but add a `host=` filter for the one workstation.
 
 ### Q7 — Top client IPs hitting the web server (one day).
 Scope to a single day and use `top`.
-**Hint:** `index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | top limit=10 clientip`.
+**Hint:** Set the day window, then `top clientip` on `sourcetype=access_combined`. `top` gives you the ranked list + percentages for free.
 
 ### Q8 — Break down web requests by HTTP status and method.
-**Hint:** `… sourcetype=access_combined earliest=… latest=… | stats count by status method | sort - count`. Which statuses dominate? Any `4xx`/`5xx` spikes?
+**Hint:** `stats count by status method` on the day's web logs, then `sort` descending. Which statuses dominate? Any `4xx`/`5xx` spikes?
 
 ### Q9 — Chart events per day for one noisy sourcetype.
-**Hint:** `index=botsv2 sourcetype=suricata | timechart span=1d count`. (Suricata is ~2M events — still set a window if it drags.)
+**Hint:** `timechart span=1d count` on `sourcetype=suricata`. (~2M events — still set a window if it drags.)
 
 ### Q10 — Which host has the most Sysmon process-creation events?
-**Hint:** `| tstats count where index=botsv2 sourcetype=*ysmon* by host | sort - count`. (Sysmon field extraction is supplied by the lab add-on, like v1.)
+**Hint:** `tstats count by host`, filtered to the Sysmon sourcetype (`*ysmon*`). (Sysmon field extraction is supplied by the lab add-on, like v1.)
 
 ### Q11 — Show 10 raw web events as a clean table.
-**Hint:** `… sourcetype=access_combined earliest=… latest=… | table _time clientip method uri status | head 10`.
+**Hint:** `table` only the columns you care about (`_time`, `clientip`, `method`, `uri`, `status`), then `head 10`.
 
 ### Q12 — Unique URIs requested on the web server (one day).
-**Hint:** `… sourcetype=access_combined earliest=… latest=… | stats dc(uri) as unique_uris` then `| stats count by uri | sort - count` to see the popular ones. Or `| dedup uri | table uri`.
+**Hint:** `dc(uri)` gives the count; `stats count by uri | sort` shows the popular ones; `dedup uri` lists them. Pick the one that answers what you're asking.
 
 ### Q13 — Sort & limit: the 5 rarest User-Agents.
-**Hint:** `… sourcetype=access_combined earliest=… latest=… | stats count by useragent | sort count | head 5`. Rare UAs are where recon tools hide.
+**Hint:** `stats count by useragent`, then `sort` *ascending* (`sort count`, no `-`) and `head 5`. Rare UAs are where recon tools hide.
 
 ### Q14 — `eval`: bucket requests into success vs. error.
-**Hint:** `… | eval class=if(status>=400,"error","ok") | stats count by class`. Then try `case()` for 2xx/3xx/4xx/5xx buckets.
+**Hint:** `eval` a new field using `if(status>=400,"error","ok")`, then `stats count by` it. Once that clicks, redo it with `case()` for 2xx/3xx/4xx/5xx buckets.
 
 ### Q15 — `rex`: pull a field out of a raw string.
 Extract the top-level path segment from the URI.
-**Hint:** `… | rex field=uri "^/(?<section>[^/?]+)" | top section`. `rex` is the one regex you must own — everything else is optional.
+**Hint:** `rex field=uri` with a named capture group for the first `/segment`, then `top` it. `rex` is the one regex you must own — everything else is optional.
 
 ### Q16 — `rare` / ascending sort: the least-common sourcetypes.
-**Hint:** `| tstats count where index=botsv2 by sourcetype | sort count | head 5`. `sort count` (no `-`) is ascending. The 1-event sourcetypes (`stream:irc`, `symantec:ep:security:file`, …) are often the *interesting* ones — the opposite instinct from "biggest first."
+**Hint:** Same as Q1, but `sort` *ascending* and `head 5`. The 1-event sourcetypes (`stream:irc`, `symantec:ep:security:file`, …) are often the *interesting* ones — the opposite instinct from "biggest first."
 
 ### Q17 — Scope a count to one host, one day.
-**Hint:** `| tstats count where index=botsv2 host=cassiopeia earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00"`. `cassiopeia` alone emits ~2.5M events *in a single day* — proof of why you always scope time.
+**Hint:** `tstats count` with a `host=cassiopeia` filter and a one-day window. Notice just how many events one host emits in a single day — that's why you scope.
 
 ### Q18 — Several aggregates in one `stats`.
 On the web logs (one day) get count + average/max/min response size together.
-**Hint:** `… sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | stats count avg(bytes) max(bytes) min(bytes)`. One `stats` can carry many functions.
+**Hint:** One `stats` can hold many functions side by side — `count`, `avg(bytes)`, `max(bytes)`, `min(bytes)`.
 
 ### Q19 — Distinct count (`dc`).
 How many *unique* client IPs hit the web server that day?
-**Hint:** `… sourcetype=access_combined earliest=… latest=… | stats dc(clientip) as clients`. (Only ~34 — a small, countable set; `dc()` is your "how many different?" tool.)
+**Hint:** `dc(clientip)` is your "how many *different*?" tool (a small, countable set here).
 
 ### Q20 — `timechart` split by a field.
 Chart web requests per hour, split by HTTP status.
-**Hint:** `… sourcetype=access_combined earliest=… latest=… status=* | timechart span=1h count by status`. `timechart … by <field>` gives one line per value — watch the `4xx` line for scanning spikes. (Add `status=*` or the field-less rows skew it — see Stage 2.)
+**Hint:** `timechart span=1h count by status` gives one line per status value — watch the `4xx` line for scanning spikes. Gate on `status=*` first, or the field-less rows skew it (see Stage 2).
 
 ---
 
