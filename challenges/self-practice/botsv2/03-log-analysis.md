@@ -22,7 +22,12 @@ fields out of it*. Crucial lesson up front:
 | `linux_secure`, `auditd` | syslog text | ❌ no | **`rex`** the message |
 | `mysql:*`, `osquery_results` | JSON/mixed | ⚠️ JSON → `spath` | `spath`, or read `_raw` then `rex` |
 
-> Solutions: [SOLUTIONS.md](SOLUTIONS.md) (Stage 3). Scope to a day (e.g. `08/24/2017`) — v2 is 226M events.
+> ⏱ **Time picker for Stage 3** (depends on the source you're reading):
+> - Windows endpoint / Sysmon (Q41–Q43): `08/24/2017 00:00:00` → `08/25/2017 00:00:00`
+> - Web / DNS / IDS / Palo Alto (Q44–Q47): `08/23/2017 00:00:00` → `08/24/2017 00:00:00`
+> - APT artifacts (Q54–Q60: SMTP, FTP, registry, osquery, C2): `08/15/2017 00:00:00` → `08/26/2017 00:00:00`
+
+> Solutions: [SOLUTIONS.md](SOLUTIONS.md) (Stage 3). v2 is 226M events — always scope, or use `tstats`/keyword searches.
 
 ---
 
