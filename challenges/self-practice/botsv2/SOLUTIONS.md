@@ -1,8 +1,8 @@
 # BOTS v2 — Solutions
 
-Reference answers, verified against the loaded `index=botsv2`. ✅ = confirmed
-value. Fundamentals are about *fluency*, so for many the "answer" is the query
-+ the shape of the result, not a single magic number.
+Reference answers, verified against the loaded `index=botsv2`. Fundamentals
+are about *fluency*, so for many the "answer" is the query + the shape of the
+result, not a single magic number.
 
 > Time picker: v2 spans **all of August 2017**. Scope raw searches to a day.
 
@@ -10,64 +10,64 @@ value. Fundamentals are about *fluency*, so for many the "answer" is the query
 
 ## Stage 1 — Fundamentals
 
-### Q1 ✅ Sourcetypes
+### Q1 Sourcetypes
 ```spl
 | tstats count where index=botsv2 by sourcetype | sort - count
 ```
 Biggest are `winregistry` (~55M), `perfmon:process` (~49M), `mysql:server:stats` (~27M), `collectd`, then security-relevant ones: `suricata`, `xmlwineventlog:…sysmon…`, `stream:*`, `pan:traffic` (Palo Alto), `access_combined` (Apache web), `wineventlog:security`, `symantec:ep:*`, `linux_secure`/`auditd`/`osquery_results`.
 
-### Q2 ✅ Total events
+### Q2 Total events
 ```spl
 | tstats count where index=botsv2
 ```
 **226,337,681** events. (`tstats` returns instantly; a raw `… | stats count` would scan every event — don't.)
 
-### Q3 ✅ Distinct sourcetypes / hosts
+### Q3 Distinct sourcetypes / hosts
 ```spl
 | tstats dc(sourcetype) as sourcetypes dc(host) as hosts where index=botsv2
 ```
 **104 sourcetypes, 23 hosts.**
 
-### Q4 ✅ Time span
+### Q4 Time span
 ```spl
 | tstats min(_time) as first max(_time) as last where index=botsv2
 | eval first=strftime(first,"%F %T"), last=strftime(last,"%F %T")
 ```
 **2017-08-01 00:00 → 2017-08-31 23:59** (a full month).
 
-### Q5 ✅ Hosts
+### Q5 Hosts
 ```spl
 | tstats count where index=botsv2 by host | sort - count
 ```
 23 hosts. Busiest: `cassiopeia` (~63M), `maclory-air13`, then workstations `wrk-btun`, `wrk-ghoppy`, `wrk-aturing`, `wrk-klagerf`, `wrk-abungst`, `wrk-fmaltes`, `wrk-bgist`; servers `mercury`, `venus`, `jupiter`, `gacrux`, `growler`, `jabbah`, `eridanus`, `matar`, `uranus`, `altair`. Naming: `wrk-*` = user workstations, single-word = servers, `maclory-air13` = a MacBook.
 
-### Q6 ✅ One host's sourcetypes
+### Q6 One host's sourcetypes
 ```spl
 | tstats count where index=botsv2 host=wrk-ghoppy by sourcetype | sort - count
 ```
 A workstation emits Sysmon, winregistry, wineventlog, perfmon, stream:*, etc. — the endpoint telemetry stack.
 
-### Q7 ✅ Web top clients (1 day)
+### Q7 Web top clients (1 day)
 ```spl
 index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
 | top limit=10 clientip
 ```
 On 08/23, top talkers include `4.14.104.185`, `98.116.39.236`, `68.99.6.195`, … (mix of visitors — which ones are malicious is a Stage-4 hunt, not here).
 
-### Q8 ✅ Status / method breakdown
+### Q8 Status / method breakdown
 ```spl
 … sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | stats count by status method | sort - count
 ```
 On 08/23: `200 GET` 10,480 · `200 POST` 879 · `403 GET` 344 · `304 GET` 327 · `404 GET` 231 · `302 GET` 30.
 ⚠️ **Verified gotcha:** `status` is only extracted on a *subset* of `access_combined` — ~**41,742 events that day have no `status`** and simply don't appear in this table. `stats count by status` silently drops them. Always sanity-check how many events lack the field (`… | stats count(status) as have count as total`).
 
-### Q9 ✅ Events per day
+### Q9 Events per day
 ```spl
 index=botsv2 sourcetype=suricata | timechart span=1d count
 ```
 Verified noisiest IDS days: **08-19 (192,762)**, 08-26 (136,050), 08-24 (92,290), 08-18, 08-25. Note the attack-relevant activity spans **more than just 08-24** — a good reminder to widen your window when hunting an APT (much of the volume is the port-135 scan, but the spread of busy days is the point).
 
-### Q10 ✅ Sysmon by host
+### Q10 Sysmon by host
 ```spl
 | tstats count where index=botsv2 sourcetype=*ysmon* by host | sort - count
 ```
@@ -102,31 +102,31 @@ Odd/automation UAs (scanners, scripts) surface at the bottom of the frequency li
 ```
 Extracts the first path segment (e.g. `product`, `cart`, `joomla`…) so you can profile what parts of the site are hit.
 
-### Q16 ✅ Rarest sourcetypes
+### Q16 Rarest sourcetypes
 ```spl
 | tstats count where index=botsv2 by sourcetype | sort count | head 5
 ```
 `sort count` (ascending) surfaces the 1-event sourcetypes: `stream:irc`, `symantec:ep:behavior:file`, `symantec:ep:security:file`, `unix:update`, `unix:uptime`. Rarity ≠ irrelevance — `symantec:ep:security:file` (1 event) is the single Host-Integrity alert.
 
-### Q17 ✅ Scope to one host / one day
+### Q17 Scope to one host / one day
 ```spl
 | tstats count where index=botsv2 host=cassiopeia earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00"
 ```
 **2,550,943** events — `cassiopeia` (the MySQL DB) in a *single day*. Proof of why a raw `index=botsv2` over All-time is a mistake.
 
-### Q18 ✅ Multiple aggregates in one stats
+### Q18 Multiple aggregates in one stats
 ```spl
 … sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | stats count avg(bytes) max(bytes) min(bytes)
 ```
 08/23: count **54,033**, avg ≈ **12,910** bytes, max **183,314**, min **6**. One `stats` carries many functions.
 
-### Q19 ✅ Distinct clients
+### Q19 Distinct clients
 ```spl
 … sourcetype=access_combined earliest=… latest=… | stats dc(clientip) as clients
 ```
 **34** unique client IPs on 08/23 — small enough to eyeball each later.
 
-### Q20 ✅ timechart split by status
+### Q20 timechart split by status
 ```spl
 … sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" status=* | timechart span=1h count by status
 ```
@@ -143,7 +143,7 @@ One column per status (200/302/304/403/404). The `4xx` line rises during scannin
 … sourcetype=access_combined earliest=… latest=… | eval kb=round(bytes/1024,1) | sort - kb | table _time clientip uri kb
 ```
 
-### Q22 ✅ `case()` status classes — and a real trap
+### Q22 `case()` status classes — and a real trap
 ```spl
 … sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
 | eval class=case(status<300,"2xx",status<400,"3xx",status<500,"4xx",true(),"5xx") | stats count by class
@@ -227,25 +227,25 @@ Subsearch resolves first, returns `host=<top>`, injected as a filter. Keep it ti
 ```
 Use `transaction` only when you need grouped/ordered events or duration; for plain counts `stats by clientip` is far cheaper.
 
-### Q35 ✅ iplocation enrichment
+### Q35 iplocation enrichment
 ```spl
 … sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | iplocation clientip | stats count by Country | sort - count
 ```
 Verified 08/23: United States 11,399, **Mauritius 860**, Indonesia 17, Germany 15. The Mauritius cluster is an odd outlier for a US brewery — the kind of geo anomaly worth a second look.
 
-### Q36 ✅ Busiest hour (`strftime`)
+### Q36 Busiest hour (`strftime`)
 ```spl
 … sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | eval hour=strftime(_time,"%H") | stats count by hour | sort - count
 ```
 Peak hour **09** (4,009), then **17** (3,819), **10** (3,817). `strftime(_time,"%H")` buckets by hour-of-day regardless of date; `strptime` is the inverse (string → epoch).
 
-### Q37 ✅ Missing-status count (the trap, quantified)
+### Q37 Missing-status count (the trap, quantified)
 ```spl
 … sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | stats count(status) as have count as total | eval missing=total-have
 ```
 08/23: have **12,291**, total **54,033**, **missing 41,742**. Those field-less rows are exactly what a `case()`/`true()` catch-all (Q22) mislabels "5xx". `count(field)` counts only rows where the field exists — gate on `status=*` whenever `status` drives a metric.
 
-### Q38 ✅ `values()` + `dc()` scanner profile
+### Q38 `values()` + `dc()` scanner profile
 ```spl
 … sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | stats dc(uri) as uris values(method) as methods count by clientip | sort - uris
 ```
@@ -257,7 +257,7 @@ Top: `4.14.104.185` (102 distinct URIs, `GET`+`POST`, 2,005 hits), `98.116.39.23
 ```
 `streamstats` adds a cumulative column *as it walks the rows* — unlike `eventstats`, which broadcasts one global aggregate to every row. Use it for running totals and "Nth-so-far" logic.
 
-### Q40 ✅ `match()` SQLi flag
+### Q40 `match()` SQLi flag
 ```spl
 … sourcetype=stream:http src_ip="45.77.65.211" earliest="08/23/2017:00:00:00" latest="08/26/2017:00:00:00" | eval sqli=if(match(form_data,"(?i)updatexml|union.*select"),1,0) | stats sum(sqli) as sqli_hits count
 ```
@@ -267,20 +267,20 @@ Top: `4.14.104.185` (102 distinct URIs, `GET`+`POST`, 2,005 hits), `98.116.39.23
 
 ## Stage 3 — Log Analysis
 
-### Q41 ✅ Process creation (4688)
+### Q41 Process creation (4688)
 ```spl
 index=botsv2 sourcetype=wineventlog:security EventCode=4688 earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00"
 | stats count by ComputerName | sort - count
 ```
 `ComputerName` carries the FQDN `<host>.frothly.local`. EventCode is auto-extracted (classic key=value log).
 
-### Q42 ✅ Logons (4624/4625)
+### Q42 Logons (4624/4625)
 ```spl
 … sourcetype=wineventlog:security (EventCode=4624 OR EventCode=4625) | stats count by EventCode ComputerName
 ```
 4625 = failed logon; a spike on one host flags a credential attack.
 
-### Q43 ✅ Sysmon detail
+### Q43 Sysmon detail
 ```spl
 … sourcetype=*ysmon* EventCode=1 host=wrk-* earliest=… latest=… | table _time host Image CommandLine ParentImage | sort _time
 ```
@@ -291,19 +291,19 @@ Sysmon gives the `CommandLine`/hashes that 4688 lacks here (fields via the lab a
 … sourcetype=access_combined earliest=… latest=… | stats count by status method | sort - count
 ```
 
-### Q45 ✅ DNS (JSON stream)
+### Q45 DNS (JSON stream)
 ```spl
 … sourcetype=stream:dns earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | stats count by query{} | sort - count
 ```
 Group by `query{}` (always-present question field). Verified 08/23 top: **`FHFAEBEECACACACACACACACACACACAAA`** (6,276 — a **NetBIOS-encoded** name, i.e. noise), then real domains `outlook.office365.com`, `wpad`, `manage.office.com`, `nexus.officeapps.live.com`. Lesson: the noisiest `query{}` is often NetBIOS/WPAD junk — filter it (`| regex "query{}"="\."` drops dot-less NetBIOS names) before hunting.
 
-### Q46 ✅ Suricata
+### Q46 Suricata
 ```spl
 … sourcetype=suricata alert.signature=* | stats count by alert.signature alert.category | sort - count
 ```
 Top: `ET SCAN … Port 135` (5,330), TLS/TOR, `ET POLICY Vulnerable Java`, and **`ET TROJAN OSX Backdoor Quimitchin DNS Lookup`** — the macOS malware pointer for Stage 4.
 
-### Q47 ✅ Palo Alto (CSV, needs rex)
+### Q47 Palo Alto (CSV, needs rex)
 No auto-fields. Read `_raw` (comma-separated), then extract. Example raw:
 `… ,TRAFFIC,end,1,…,10.0.2.101,10.0.1.100,…,frothly.local\amber.turing,,dns,…`
 ```spl
@@ -311,7 +311,7 @@ No auto-fields. Read `_raw` (comma-separated), then extract. Example raw:
 ```
 Domain is `frothly.local`; users appear as `frothly.local\<user>` (e.g. `amber.turing`).
 
-### Q48 ✅ SSH brute force (linux_secure, syslog → rex)
+### Q48 SSH brute force (linux_secure, syslog → rex)
 ```spl
 … sourcetype=linux_secure "Failed password"
 | rex "from (?<src_ip>\d+\.\d+\.\d+\.\d+)" | stats count by src_ip | sort - count
@@ -321,7 +321,7 @@ Domain is `frothly.local`; users appear as `frothly.local\<user>` (e.g. `amber.t
 ### Q49 — auditd / osquery
 `sourcetype=osquery_results` is JSON → use `spath`; `sourcetype=auditd` is `key=value`-ish → inspect `_raw` then `rex`. Deliverable = knowing which parser fits.
 
-### Q50 ✅ MySQL
+### Q50 MySQL
 ```spl
 | tstats count where index=botsv2 sourcetype=mysql:* by host | sort - count
 ```
@@ -335,49 +335,49 @@ DB server = **`cassiopeia`** (~61M MySQL events — it dominates the whole index
 index=botsv2 host=wrk-bgist (sourcetype=*ysmon* OR sourcetype=wineventlog:security OR sourcetype=stream:dns) earliest=… latest=… | sort _time | table _time sourcetype EventCode Image query{}
 ```
 
-### Q53 ✅ Asset picture
+### Q53 Asset picture
 ```spl
 | tstats count where index=botsv2 by host sourcetype
 ```
 Servers: `cassiopeia` (MySQL/DB), `venus`/`jupiter`/`mercury` (perfmon/pan), `gacrux` (Linux/SSH). Workstations: `wrk-*` (Sysmon/winregistry). Two Macs — `maclory-air13` and `kutekitten` (both carry `osquery_results`); **`kutekitten`** is the `10.0.4.2` host that made the Quimitchin backdoor lookup.
 
-### Q54 ✅ Email attachments (`stream:smtp`)
+### Q54 Email attachments (`stream:smtp`)
 ```spl
 sourcetype=stream:smtp "attach_filename{}"=* | stats count by "attach_filename{}"
 ```
 Two incidents in one field: **`invoice.zip`** (×4 — the Taedonggang password-protected phishing lure) and **`Saccharomyces_cerevisiae_patent.docx`** (Amber Turing emailing a brewing patent to competitor *Berk Beer* — the insider thread). Also present: GoT/Office torrents, `Malware Alert Text.txt`. (Skip `sender_email` — it's populated on only a handful of events.)
 
-### Q55 ✅ Symantec EP (`symantec:ep:*`)
+### Q55 Symantec EP (`symantec:ep:*`)
 ```spl
 | tstats count where index=botsv2 sourcetype=symantec:ep:* by sourcetype
 ```
 Eight sourcetypes: `packet:file` (316,571) and `traffic:file` (67,090) dominate (network), `agent:file`/`agt_system:file` (~15k), then the high-signal singletons **`behavior:file`** and **`security:file`** (1 event each). The `:security:file` `_raw` is comma-separated — e.g. a Host-Integrity check on `wrk-aturing` (`User: amber.turing, Domain: FROTHLY`).
 
-### Q56 ✅ FTP tooling drop (`stream:ftp`)
+### Q56 FTP tooling drop (`stream:ftp`)
 ```spl
 sourcetype=stream:ftp loadway=Download | stats count by filename src_ip dest_ip
 ```
 FTP server **`160.153.91.7`** served an attacker toolkit to `10.0.2.107` + `10.0.2.109`: `psexec.exe`, `nc.exe`, `wget64.exe`, `winsys64.dll`, `python-2.7.6.amd64.msi`, `dns.py` — plus **`나는_데이비드를_사랑한다.hwp`**, a Korean Hangul-word-processor file (the "unusual file for an American company"). `filename` / `method_parameter` carry the name; `loadway=Download` = an FTP `RETR`.
 
-### Q57 ✅ TLS issuer of the C2 (`stream:tcp`)
+### Q57 TLS issuer of the C2 (`stream:tcp`)
 ```spl
 sourcetype=stream:tcp "45.77.65.211" | stats count by ssl_issuer
 ```
 `ssl_issuer` = **`C = US`** (14,189 flows) — a bare country-only cert (no O/CN), the self-signed look of Empire's default TLS. You read this from the handshake metadata even though the C2 payload is encrypted.
 
-### Q58 ✅ Registry persistence blob (`winregistry`)
+### Q58 Registry persistence blob (`winregistry`)
 ```spl
 sourcetype=winregistry "Network" "debug" | stats count by key_path
 ```
 `HKLM\software\microsoft\network\debug` (4 events) — a base64 PowerShell-Empire payload stored *in the registry*; the `Updater` scheduled task (Stage 4) reads it back at run time. "Fileless" persistence: the malware lives in a registry value, not a file. Pull `data` to see the blob.
 
-### Q59 ✅ macOS confirmation (`osquery_results`)
+### Q59 macOS confirmation (`osquery_results`)
 ```spl
 sourcetype=osquery_results host=kutekitten "columns.path"="/Users/mkraeusen*" | stats count
 ```
 **117** file records under Mallory's home (`mkraeusen`). osquery snapshots carry `columns.sha256`/`columns.path`, so you can lift the suspicious file's hash and check it externally — this is how the incident IDs the `fpsaud`/FruitFly (Quimitchin) backdoor. The Mac has osquery but no real-time EDR: IDS *alerts*, osquery *confirms*.
 
-### Q60 ✅ One indicator, six sources
+### Q60 One indicator, six sources
 ```spl
 index=botsv2 "45.77.65.211" earliest="08/01/2017:00:00:00" latest="09/01/2017:00:00:00" | stats count by sourcetype | sort - count
 ```
