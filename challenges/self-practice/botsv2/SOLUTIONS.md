@@ -127,9 +127,16 @@ Odd/automation UAs (scanners, scripts) surface at the bottom of the frequency li
 
 ### Q14 — eval bucketing
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | eval class=if(status>=400,"error","ok") | stats count by class
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | eval class=case(status<300,"2xx",status<400,"3xx",status<500,"4xx",true(),"5xx") | stats count by class
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| eval class=if(status>=400,"error","ok")
+| stats count by class
 ```
+2-bucket version. For 2xx/3xx/4xx/5xx, swap the `eval` line for `case()`:
+```spl
+| eval class=case(status<300,"2xx",status<400,"3xx",status<500,"4xx",true(),"5xx")
+| stats count by class
+```
+(Same `true()`-catch-all trap as Q22 — see that entry before you trust the 5xx count.)
 
 ### Q15 — rex path segment
 ```spl
