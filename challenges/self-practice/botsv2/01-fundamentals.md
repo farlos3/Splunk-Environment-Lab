@@ -19,8 +19,9 @@ environment — Windows + Linux + MySQL + web + Palo Alto firewall.
 
 | Questions | Time picker |
 |---|---|
-| Q1–Q6, Q16–Q17 (discovery) | none needed — use `tstats` / `metadata` |
-| Q7–Q20 (web) | `08/23/2017 00:00:00` → `08/24/2017 00:00:00` |
+| Q1–Q6, Q9, Q10, Q16 (whole-dataset — `tstats`/`metadata`/per-day chart) | **All time** (fast — reads the index, not raw events) |
+| Q7–Q8, Q11–Q15, Q18–Q20 (web logs) | `08/23/2017 00:00:00` → `08/24/2017 00:00:00` |
+| Q17 (scope-to-one-day drill) | `08/24/2017 00:00:00` → `08/25/2017 00:00:00` |
 
 > **Hints are nudges, not answers** — they name the approach and the commands
 > to reach for. Try to write the SPL yourself; the full query + verified result

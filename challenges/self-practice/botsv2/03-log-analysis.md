@@ -26,10 +26,10 @@ fields out of it*. Crucial lesson up front:
 
 | Questions | Time picker |
 |---|---|
-| Q41–Q43 (Windows endpoint / Sysmon) | `08/24/2017 00:00:00` → `08/25/2017 00:00:00` |
-| Q44–Q47 (web / DNS / IDS / Palo Alto) | `08/23/2017 00:00:00` → `08/24/2017 00:00:00` |
-| Q48–Q53 (Linux SSH / MySQL / correlation) | single day, e.g. `08/24/2017 00:00:00` → `08/25/2017 00:00:00` (or `tstats` for counts) |
-| Q54–Q60 (APT artifacts: SMTP/FTP/registry/osquery/C2) | `08/15/2017 00:00:00` → `08/26/2017 00:00:00` |
+| Q41–Q43, Q51–Q52 (Windows endpoint / Sysmon / correlation) | `08/24/2017 00:00:00` → `08/25/2017 00:00:00` |
+| Q44–Q45 (web / DNS) | `08/23/2017 00:00:00` → `08/24/2017 00:00:00` |
+| Q46–Q50, Q53 (IDS / PAN / SSH / MySQL / asset — whole-dataset) | **All time** (these counts are dataset-wide) |
+| Q54–Q60 (APT artifacts: SMTP / FTP / registry / osquery / C2) | `08/15/2017 00:00:00` → `08/26/2017 00:00:00` |
 
 > **Hints are nudges, not answers** — they name the sourcetype, fields, and
 > approach. Write the SPL yourself; the full query + verified result is in

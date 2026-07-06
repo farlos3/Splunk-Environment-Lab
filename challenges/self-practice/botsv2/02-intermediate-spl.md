@@ -11,7 +11,9 @@ for raw searches; use `tstats`/`metadata` when you only need counts.
 
 | Questions | Time picker |
 |---|---|
-| Q21–Q39 (web logs) | `08/23/2017 00:00:00` → `08/24/2017 00:00:00` |
+| Q28–Q31 (`tstats` / `metadata` / subsearch) | **All time** (fast) |
+| Q26 (Sysmon `rex` on `Image`) | `08/24/2017 00:00:00` → `08/25/2017 00:00:00` |
+| Q21–Q25, Q27, Q32–Q39 (web logs) | `08/23/2017 00:00:00` → `08/24/2017 00:00:00` |
 | Q40 (SQLi flag — spans the attack) | `08/23/2017 00:00:00` → `08/26/2017 00:00:00` |
 
 > **Hints are nudges, not answers** — they point at the commands and shape.
