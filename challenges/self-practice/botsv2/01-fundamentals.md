@@ -82,7 +82,7 @@ Extract the top-level path segment from the URI.
 **Hint:** Same as Q1, but `sort` *ascending* and `head 5`. The 1-event sourcetypes (`stream:irc`, `symantec:ep:security:file`, …) are often the *interesting* ones — the opposite instinct from "biggest first."
 
 ### Q17 — Scope a count to one host, one day.
-**Hint:** `tstats count` with a `host=cassiopeia` filter and a one-day window. Notice just how many events one host emits in a single day — that's why you scope.
+**Hint:** `tstats count` with a `host=cassiopeia` filter and the `08/24/2017 00:00:00` → `08/25/2017 00:00:00` window from the table above. Notice just how many events one host emits in a single day — that's why you scope.
 
 ### Q18 — Several aggregates in one `stats`.
 On the web logs (one day) get count + average/max/min response size together.
