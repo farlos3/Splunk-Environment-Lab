@@ -7,7 +7,7 @@
 
 Three **advanced, methodology-driven** tracks that go beyond the guided
 Q&A packs in [`../../self-practice/`](../../self-practice/) and
-[`../../2026 Splunk BOTS Training/`](../../2026%20Splunk%20BOTS%20Training/).
+[`../../Bots Training/`](../../Bots%20Training/).
 
 The difference matters:
 

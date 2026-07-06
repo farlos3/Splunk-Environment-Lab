@@ -2,7 +2,7 @@
 
 ⚠️ **Last resort — try every problem honestly first.**
 
-> Section 6 is mostly **design-style** since SAA is a cloud service the lab can't host. SPL solutions assume you've indexed simulated SAA JSON output per the setup notes in [06-attack-analyzer.md](06-attack-analyzer.md).
+> Section 6 is mostly **design-style** since SAA is a cloud service the lab can't host. SPL solutions assume you've indexed simulated SAA JSON output per the setup notes in [../question/06-attack-analyzer.md](../question/06-attack-analyzer.md).
 
 ---
 
@@ -238,4 +238,4 @@ ioc_value,ioc_type,first_seen,last_seen,sources_count,max_score,verdict_reasons,
 
 ---
 
-✅ End Section 6 solutions
+End Section 6 solutions

@@ -24,12 +24,12 @@ After completing all questions, you should be able to:
 
 | File | Level | Items | Focus | Solutions |
 |---|---|---|---|---|
-| [01-basic-spl-commands.md](01-basic-spl-commands.md) | Beginner | Q1–Q14 | One+ exercise per basic command | [→](01-basic-spl-commands-solutions.md) |
-| [02-intermediate-spl.md](02-intermediate-spl.md) | Intermediate | Q15–Q21 | `eval` (3 forms), `rex`, chaining commands | [→](02-intermediate-spl-solutions.md) |
-| [03-detection-scenarios.md](03-detection-scenarios.md) | Applied | Q22–Q28 | Suspicious PowerShell, Impossible Travel, IOC hunting | [→](03-detection-scenarios-solutions.md) |
-| [04-enterprise-security.md](04-enterprise-security.md) | Advanced | Q29–Q38 | CIM data models, correlation searches, notable events, RBA, asset & identity | [→](04-enterprise-security-solutions.md) |
-| [05-es8-workshop.md](05-es8-workshop.md) | Advanced | Q39–Q50 | ES 8.3 workshop walkthrough — Findings, Finding-Based Detections, Response Plans, Detection Versioning, SOAR | [→](05-es8-workshop-solutions.md) |
-| [06-attack-analyzer.md](06-attack-analyzer.md) | Advanced | Q51–Q60 | Splunk Attack Analyzer (SAA) — submission, verdict parsing, ES enrichment, SOAR playbooks | [→](06-attack-analyzer-solutions.md) |
+| [question/01-basic-spl-commands.md](question/01-basic-spl-commands.md) | Beginner | Q1–Q14 | One+ exercise per basic command | [→](answer/01-basic-spl-commands-solutions.md) |
+| [question/02-intermediate-spl.md](question/02-intermediate-spl.md) | Intermediate | Q15–Q21 | `eval` (3 forms), `rex`, chaining commands | [→](answer/02-intermediate-spl-solutions.md) |
+| [question/03-detection-scenarios.md](question/03-detection-scenarios.md) | Applied | Q22–Q28 | Suspicious PowerShell, Impossible Travel, IOC hunting | [→](answer/03-detection-scenarios-solutions.md) |
+| [question/04-enterprise-security.md](question/04-enterprise-security.md) | Advanced | Q29–Q38 | CIM data models, correlation searches, notable events, RBA, asset & identity | [→](answer/04-enterprise-security-solutions.md) |
+| [question/05-es8-workshop.md](question/05-es8-workshop.md) | Advanced | Q39–Q50 | ES 8.3 workshop walkthrough — Findings, Finding-Based Detections, Response Plans, Detection Versioning, SOAR | [→](answer/05-es8-workshop-solutions.md) |
+| [question/06-attack-analyzer.md](question/06-attack-analyzer.md) | Advanced | Q51–Q60 | Splunk Attack Analyzer (SAA) — submission, verdict parsing, ES enrichment, SOAR playbooks | [→](answer/06-attack-analyzer-solutions.md) |
 
 > 📖 **Solutions are intentionally separated by section** so you can grade yourself one section at a time without spoiling later ones.
 > Sections 5–6 are largely **design-style** questions — the solutions show *representative* sample answers, not the only valid response.
@@ -45,7 +45,7 @@ After completing all questions, you should be able to:
 1. The Splunk lab is running — `http://localhost:8000` is reachable (admin / `p@ssw0rd`)
 2. The BOTS workshop dataset is loaded into the `botsv1` index (follow the *Add Data* steps in the MD101 PDF, pages 14–17)
 3. You know how to set the **time picker** in the Splunk Web UI
-4. **Section 4 only:** install either the **Splunk Common Information Model** app (free, lightweight path) **or** the full **Splunk Enterprise Security** trial. See [04-enterprise-security.md](04-enterprise-security.md) for setup details.
+4. **Section 4 only:** install either the **Splunk Common Information Model** app (free, lightweight path) **or** the full **Splunk Enterprise Security** trial. See [question/04-enterprise-security.md](question/04-enterprise-security.md) for setup details.
 
 > 💡 If a search returns zero results, **check the time picker first**.
 > The workshop dataset has a narrow active window — use **All time** or set

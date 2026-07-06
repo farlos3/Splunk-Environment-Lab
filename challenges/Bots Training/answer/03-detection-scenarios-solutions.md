@@ -112,4 +112,4 @@ OR (sourcetype="Script:InstalledApps" host=WEBSERVER-01)
 
 ---
 
-✅ End Section 3 solutions
+End Section 3 solutions

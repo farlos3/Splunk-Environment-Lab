@@ -190,4 +190,4 @@ Same as Q49.
 
 ---
 
-✅ End Section 5 solutions
+End Section 5 solutions

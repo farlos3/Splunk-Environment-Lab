@@ -97,4 +97,4 @@ Ask yourself: *why* is user-spray weighted heavier than a flat failure count?
 
 ---
 
-✅ End of Section 2 — at this point you can use SPL to tell a multi-step "story" about the data. Continue to [Section 3 →](03-detection-scenarios.md)
+End of Section 2 — at this point you can use SPL to tell a multi-step "story" about the data. Continue to [Section 3 →](03-detection-scenarios.md)

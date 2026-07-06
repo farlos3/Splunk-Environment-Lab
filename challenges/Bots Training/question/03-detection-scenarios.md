@@ -124,4 +124,4 @@ Order events oldest → newest with columns `_time`, `sourcetype`, `EventCode_or
 
 🎓 **End of workshop!**
 If you completed all 28 without re-reading the MD101 examples, the full deck now lives in your head.
-Next steps: try the [BOTS official walkthroughs](../splunk-bots/) or the [50-question self-practice pack](../self-practice/) for BOTS v1.
+Next steps: try the [BOTS official walkthroughs](../../splunk-bots/) or the [50-question self-practice pack](../../self-practice/) for BOTS v1.

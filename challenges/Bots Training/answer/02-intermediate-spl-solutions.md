@@ -84,4 +84,4 @@ source=XmlWinEventLog EventCode=4625
 
 ---
 
-✅ End Section 2 solutions
+End Section 2 solutions

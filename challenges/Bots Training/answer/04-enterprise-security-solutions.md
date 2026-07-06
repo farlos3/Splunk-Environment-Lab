@@ -2,7 +2,7 @@
 
 ⚠️ **Last resort.** Try every problem honestly first.
 
-> **Prerequisite:** install the **Splunk Common Information Model** app (lightweight path) or **Splunk ES trial** (full path), and create indexes `notable` and `risk` via *Settings → Indexes*. See [04-enterprise-security.md](04-enterprise-security.md) for setup.
+> **Prerequisite:** install the **Splunk Common Information Model** app (lightweight path) or **Splunk ES trial** (full path), and create indexes `notable` and `risk` via *Settings → Indexes*. See [../question/04-enterprise-security.md](../question/04-enterprise-security.md) for setup.
 
 ---
 
@@ -187,4 +187,4 @@ ES's *Asset & Identity Framework* ships two pre-defined lookups: `asset_lookup_b
 
 ---
 
-✅ End Section 4 solutions
+End Section 4 solutions

@@ -133,4 +133,4 @@ Find the top 5 hosts in `botsv1` by total event count, and for each show how man
 
 ---
 
-✅ End of Section 1 — if you can write all 14 without peeking at the cheat sheet, the basics are wired in. Continue to [Section 2 →](02-intermediate-spl.md)
+End of Section 1 — if you can write all 14 without peeking at the cheat sheet, the basics are wired in. Continue to [Section 2 →](02-intermediate-spl.md)

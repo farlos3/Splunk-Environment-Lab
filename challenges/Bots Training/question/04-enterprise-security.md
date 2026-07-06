@@ -247,4 +247,4 @@ If you finished Q29–Q38 you have hands-on intuition for: CIM, correlation sear
 **Next steps:**
 - Read the [ES Use Case Library](https://docs.splunk.com/Documentation/ES/latest/UseCases/Overview) and adapt three to BOTS data
 - Tag detections with MITRE ATT&CK technique IDs in `annotations.mitre_attack` and pivot by technique
-- Try the [splunk-bots/](../splunk-bots/) BOTS walkthroughs through an ES-style lens (everything becomes a correlation search candidate)
+- Try the [splunk-bots/](../../splunk-bots/) BOTS walkthroughs through an ES-style lens (everything becomes a correlation search candidate)
