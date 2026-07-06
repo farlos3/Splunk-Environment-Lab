@@ -93,12 +93,12 @@ Geo-locate the top external web clients.
 ## More `eval` / aggregation drills
 
 ### Q36 — Time-of-day with `strftime`
-Which hour of the day is busiest on the web server? Derive the hour from `_time`.
+Which hour of the day is busiest on the web server? Use `08/23/2017 00:00:00` → `08/24/2017 00:00:00` and derive the hour from `_time`.
 **Hint:** `eval hour=strftime(_time,"%H")`, then `stats count by hour | sort - count`. (`strptime` is the inverse — string → epoch.)
 
 ### Q37 — Null-field awareness (a real v2 trap)
-Not every `access_combined` event has a `status`. Count how many are **missing** it.
-**Hint:** `count(status)` counts only rows where the field exists; a plain `count` counts all — subtract to get the missing total. That gap (~41,742 that day) is exactly why `stats count by status` and a `case()`/`true()` catch-all (Q22) silently mislead — gate on `status=*` when the value drives a metric.
+Not every `access_combined` event has a `status`. On the same `08/23/2017` window, count how many are **missing** it.
+**Hint:** `count(status)` counts only rows where the field exists; a plain `count` counts all — subtract to get the missing total. That gap (~41,742 on 08/23) is exactly why `stats count by status` and a `case()`/`true()` catch-all (Q22) silently mislead — gate on `status=*` when the value drives a metric.
 
 ### Q38 — `values()` + `dc()` together
 For each web client, list the HTTP methods it used and how many distinct URIs it touched — a one-line scanner profile.

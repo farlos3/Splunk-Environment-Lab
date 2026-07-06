@@ -54,7 +54,7 @@ Sysmon (`*ysmon*`) gives you the `CommandLine` that 4688 often lacks here.
 ## Web & network (extracted)
 
 ### Q44 — Web request analysis
-**Hint:** `stats count by status method` on the day's `access_combined`, `sort` descending; then eyeball `uri` for odd paths.
+**Hint:** `08/23/2017 00:00:00` → `08/24/2017 00:00:00` on `access_combined`. `stats count by status method`, `sort` descending; then eyeball `uri` for odd paths.
 
 ### Q45 — DNS via Splunk Stream (JSON)
 **Hint:** `stats count by query{}` on `stream:dns`, `sort` descending. Group by `query{}` (the DNS question, always present) — same rule as v1.

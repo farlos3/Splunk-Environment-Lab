@@ -51,10 +51,10 @@ Pick a workstation, e.g. `wrk-ghoppy`.
 
 ### Q7 — Top client IPs hitting the web server (one day).
 Scope to a single day and use `top`.
-**Hint:** Set the day window, then `top clientip` on `sourcetype=access_combined`. `top` gives you the ranked list + percentages for free.
+**Hint:** Set the window to `08/23/2017 00:00:00` → `08/24/2017 00:00:00` (see the table above), then `top clientip` on `sourcetype=access_combined`. `top` gives you the ranked list + percentages for free.
 
 ### Q8 — Break down web requests by HTTP status and method.
-**Hint:** `stats count by status method` on the day's web logs, then `sort` descending. Which statuses dominate? Any `4xx`/`5xx` spikes?
+**Hint:** Same `08/23/2017` window as Q7. `stats count by status method` on the web logs, then `sort` descending. Which statuses dominate? Any `4xx`/`5xx` spikes?
 
 ### Q9 — Chart events per day for one noisy sourcetype.
 **Hint:** `timechart span=1d count` on `sourcetype=suricata`. (~2M events — still set a window if it drags.)
@@ -66,7 +66,7 @@ Scope to a single day and use `top`.
 **Hint:** `table` only the columns you care about (`_time`, `clientip`, `method`, `uri`, `status`), then `head 10`.
 
 ### Q12 — Unique URIs requested on the web server (one day).
-**Hint:** `dc(uri)` gives the count; `stats count by uri | sort` shows the popular ones; `dedup uri` lists them. Pick the one that answers what you're asking.
+**Hint:** Same `08/23/2017 00:00:00` → `08/24/2017 00:00:00` window as Q7. `dc(uri)` gives the count; `stats count by uri | sort` shows the popular ones; `dedup uri` lists them. Pick the one that answers what you're asking.
 
 ### Q13 — Sort & limit: the 5 rarest User-Agents.
 **Hint:** `stats count by useragent`, then `sort` *ascending* (`sort count`, no `-`) and `head 5`. Rare UAs are where recon tools hide.
@@ -85,15 +85,15 @@ Extract the top-level path segment from the URI.
 **Hint:** `tstats count` with a `host=cassiopeia` filter and the `08/24/2017 00:00:00` → `08/25/2017 00:00:00` window from the table above. Notice just how many events one host emits in a single day — that's why you scope.
 
 ### Q18 — Several aggregates in one `stats`.
-On the web logs (one day) get count + average/max/min response size together.
+On the web logs, `08/23/2017 00:00:00` → `08/24/2017 00:00:00`, get count + average/max/min response size together.
 **Hint:** One `stats` can hold many functions side by side — `count`, `avg(bytes)`, `max(bytes)`, `min(bytes)`.
 
 ### Q19 — Distinct count (`dc`).
-How many *unique* client IPs hit the web server that day?
+How many *unique* client IPs hit the web server on `08/23/2017`?
 **Hint:** `dc(clientip)` is your "how many *different*?" tool (a small, countable set here).
 
 ### Q20 — `timechart` split by a field.
-Chart web requests per hour, split by HTTP status.
+Chart web requests per hour, split by HTTP status, for `08/23/2017 00:00:00` → `08/24/2017 00:00:00`.
 **Hint:** `timechart span=1h count by status` gives one line per status value — watch the `4xx` line for scanning spikes. Gate on `status=*` first, or the field-less rows skew it (see Stage 2).
 
 ---
