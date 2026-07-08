@@ -46,6 +46,7 @@ Biggest are `winregistry` (~55M), `perfmon:process` (~49M), `mysql:server:stats`
 | tstats min(_time) as first max(_time) as last where index=botsv2
 | eval first=strftime(first,"%F %T"), last=strftime(last,"%F %T")
 ```
+`%F` and `%T` are shorthand format codes: `%F` = `%Y-%m-%d` (e.g. `2017-08-23`), `%T` = `%H:%M:%S` (e.g. `14:30:00`) — `"%F %T"` together give the full `2017-08-23 14:30:00` style timestamp in fewer characters than spelling out `"%Y-%m-%d %H:%M:%S"`.
 **2017-08-01 00:00 → 2017-08-31 23:59** (a full month).
 
 ### Q5 Hosts
@@ -269,6 +270,7 @@ Reads indexed fields → fast on 226M events; use instead of raw `| timechart` w
 | eval firstTime=strftime(firstTime,"%F %T"), lastTime=strftime(lastTime,"%F %T")
 | table sourcetype totalCount firstTime lastTime
 ```
+Same `%F %T` shorthand as Q4 — `%F` = `%Y-%m-%d`, `%T` = `%H:%M:%S` — turns `firstTime`/`lastTime`'s raw epoch numbers into readable timestamps.
 
 ### Q30 — tstats by host+sourcetype
 ```spl
