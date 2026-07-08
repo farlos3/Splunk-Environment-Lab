@@ -37,7 +37,9 @@ index=botsv2 sourcetype=*ysmon* EventCode=1 (CommandLine="*schtasks*Create*" OR 
 
 ### A5 ✅ Confirm & scope C2
 ```spl
-index=botsv2 sourcetype=pan:traffic "45.77.65.211" | rex "TRAFFIC,\w+,\d+,[^,]+,(?<src_ip>[^,]+),(?<dest_ip>[^,]+)" | stats count by src_ip
+index=botsv2 sourcetype=pan:traffic "45.77.65.211"
+| rex "TRAFFIC,\w+,\d+,[^,]+,(?<src_ip>[^,]+),(?<dest_ip>[^,]+)"
+| stats count by src_ip
 ```
 C2 corroborated across PAN + Suricata + Stream + web (A1). Enumerate internal `src_ip`s reaching it = the blast-radius seed. **Report-grade:** one indicator, four independent sources.
 
@@ -79,8 +81,12 @@ index=botsv2 sourcetype=suricata "Quimitchin" | stats count by src_ip dest_ip
 - **D0 ✅** `| metadata type=sourcetypes index=botsv2` → Windows (4688/Sysmon), Linux (syslog/auditd), macOS (osquery), PAN, Suricata, Stream, MySQL. Gaps: **the Mac has osquery but no real-time EDR** (IDS surfaces the backdoor, osquery confirms it on-host); PAN/Linux need `rex`.
 - **D1 ✅** internal hosts beaconing C2 `45.77.65.211` with first-seen:
   ```spl
-  index=botsv2 sourcetype=pan:traffic "45.77.65.211" | rex ",(?<sip>10\.0\.\d+\.\d+),(?<dip>[^,]+)," | search dip="45.77.65.211"
-  | stats count min(_time) as first by sip | eval first=strftime(first,"%m-%d %H:%M") | sort first
+  index=botsv2 sourcetype=pan:traffic "45.77.65.211"
+  | rex ",(?<sip>10\.0\.\d+\.\d+),(?<dip>[^,]+),"
+  | search dip="45.77.65.211"
+  | stats count min(_time) as first by sip
+  | eval first=strftime(first,"%m-%d %H:%M")
+  | sort first
   ```
   `10.0.2.109` first at **08-15 23:36** (earliest foothold) → `10.0.2.107` (08-24 03:29), `10.0.1.100`/`10.0.1.101` (08-24 03:55). **`t0` = Aug 15**, not the Aug-24 spike.
 - **D2 ✅** Empire `-enc` parented by **`WmiPrvSE.exe`** (T1047) on **venus, wrk-btun, wrk-klagerf**. Root cause: `wrk-btun`/`billy.tun` is the foothold; the **`service3`** account then spread via WMI to venus + wrk-klagerf.
@@ -144,7 +150,8 @@ index=botsv2 sourcetype=linux_secure "Failed password"
 
 ### DE6 ✅ Network trojan / macOS (T1071)
 ```spl
-index=botsv2 sourcetype=suricata alert.category="A Network Trojan was detected" | stats count by src_ip alert.signature
+index=botsv2 sourcetype=suricata alert.category="A Network Trojan was detected"
+| stats count by src_ip alert.signature
 ```
 Fires on **Quimitchin** from `10.0.4.2` (`kutekitten`). **Why it matters:** the Mac runs `osquery` but no behavioural EDR, so the **IDS category is what *alerts*** — you then confirm the malware file/hash on-host via `osquery_results`. This is how you cover a host that has query-based telemetry but no real-time detection.
 

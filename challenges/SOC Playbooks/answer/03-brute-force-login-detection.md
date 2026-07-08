@@ -27,7 +27,8 @@ Confirmed above: **`23.22.63.114`**, `Python-urllib/2.7` UA — distinct from th
 ### Step 6 — Geo-location
 ```spl
 index=botsv1 sourcetype=stream:http src_ip="23.22.63.114" earliest="08/10/2016:00:00:00" latest="08/12/2016:00:00:00"
-| iplocation src_ip | stats count by src_ip Country City
+| iplocation src_ip
+| stats count by src_ip Country City
 ```
 **United States, Ashburn** — cloud-hosted (AWS), not the brute-forcer's real physical location; treat geo as a data point, not proof of origin.
 
@@ -35,7 +36,8 @@ index=botsv1 sourcetype=stream:http src_ip="23.22.63.114" earliest="08/10/2016:0
 ```spl
 index=botsv1 sourcetype=stream:http dest_ip="192.168.250.70" http_method=POST uri_path=/joomla/administrator/index.php
 | rex field=form_data "passwd=(?<password>[^&]+)"
-| stats count by password | sort - count
+| stats count by password
+| sort - count
 ```
 All passwords used exactly once **except `batman` (count 2)** — used once during the brute force, once for the actual compromised login. **Answer: `batman`.**
 
@@ -48,7 +50,9 @@ Block `23.22.63.114`; force-reset the `admin` credential.
 
 ```spl
 index=botsv2 sourcetype=linux_secure "Failed password"
-| rex "from (?<src_ip>\d+\.\d+\.\d+\.\d+)" | stats count by src_ip | sort - count
+| rex "from (?<src_ip>\d+\.\d+\.\d+\.\d+)"
+| stats count by src_ip
+| sort - count
 ```
 Top offender: **`58.242.83.20`**, **26,174** failures, targeting `gacrux`. `iplocation` → **China**.
 ```spl

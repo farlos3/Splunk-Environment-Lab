@@ -17,8 +17,11 @@ thin, deliverable is a documented negative.
 
 ### A1 ✅ Baseline & focus
 ```spl
-index=botsv1 sourcetype=fgt_traffic action=deny dstport IN(22,23,3389) | stats count by srcip dstport | sort - count
-index=botsv1 sourcetype=stream:http dest_ip="192.168.250.70" http_method=POST | stats count by src_ip
+index=botsv1 sourcetype=fgt_traffic action=deny dstport IN(22,23,3389)
+| stats count by srcip dstport
+| sort - count
+index=botsv1 sourcetype=stream:http dest_ip="192.168.250.70" http_method=POST
+| stats count by src_ip
 ```
 Perimeter noise (denied, distributed — e.g. `192.254.66.174` 9,641 SSH denies) is **not** the incident. The *accepted* traffic to `192.168.250.70` is dominated by **`40.80.148.42`** (~12.8k POSTs). That's your suspect.
 
@@ -44,7 +47,8 @@ Injection markers come almost entirely from **`40.80.148.42`** (~600 — the sca
 
 ### A4 ✅ Upload / web shell
 ```spl
-index=botsv1 sourcetype=stream:http dest_ip="192.168.250.70" http_method=POST part_filename=* | stats count by src_ip part_filename
+index=botsv1 sourcetype=stream:http dest_ip="192.168.250.70" http_method=POST part_filename=*
+| stats count by src_ip part_filename
 ```
 `40.80.148.42` uploaded **`agent.php`** and **`joomla.json`** — the access→action boundary (T1505.003).
 
@@ -62,7 +66,8 @@ Campaign = **Po1s0n1vy** APT (defacement theme). IOCs: attacker IPs `40.80.148.4
 ### B1 ✅ Initial access
 ```spl
 index=botsv1 host=we8105desk USBSTOR | stats count by sourcetype
-index=botsv1 host=we8105desk sourcetype=winregistry key_path="*USBSTOR*" key_path="*friendlyname*" | table _time key_path data
+index=botsv1 host=we8105desk sourcetype=winregistry key_path="*USBSTOR*" key_path="*friendlyname*"
+| table _time key_path data
 ```
 USB evidence is in **`winregistry`** (not Sysmon). Device `FriendlyName` = **`MIRANDA_PRI`** (`Ven_Generic&Prod_Flash_Disk`). The actual code execution arrives via a Word macro (B2).
 
@@ -85,7 +90,9 @@ Cerber hijacks **`…\CurrentVersion\Run\osk`** (T1547.001). No attacker schedul
 
 ### B5 ✅ C2 channel
 ```spl
-index=botsv1 sourcetype=suricata Cerber | stats count by alert.signature_id alert.signature | sort count
+index=botsv1 sourcetype=suricata Cerber
+| stats count by alert.signature_id alert.signature
+| sort count
 index=botsv1 sourcetype=stream:dns src_ip="192.168.250.100" "query{}"="*xmfir0*"
 ```
 C2 = **`cerberhhyed5frqa.xmfir0.win`**; Suricata sigs **2816763** (`Checkin 2`, ×1 — the callback), **2816764** (×2), **2820156** (`Onion Domain Lookup`, ×2); firewall `accept`ed the egress (B8/N5).

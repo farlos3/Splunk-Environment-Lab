@@ -110,18 +110,26 @@ Returns the workstations with Sysmon coverage (the `wrk-*` hosts + the Mac). Sys
 
 ### Q11 — Raw web table
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | table _time clientip method uri status | head 10
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| table _time clientip method uri status
+| head 10
 ```
 
 ### Q12 — Unique URIs
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | stats dc(uri) as unique_uris
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | stats count by uri | sort - count      /* popular URIs */
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| stats dc(uri) as unique_uris
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| stats count by uri
+| sort - count      /* popular URIs */
 ```
 
 ### Q13 — Rarest User-Agents
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | stats count by useragent | sort count | head 5
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| stats count by useragent
+| sort count
+| head 5
 ```
 Odd/automation UAs (scanners, scripts) surface at the bottom of the frequency list.
 
@@ -140,7 +148,9 @@ index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="0
 
 ### Q15 — rex path segment
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | rex field=uri "^/(?<section>[^/?]+)" | top section
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| rex field=uri "^/(?<section>[^/?]+)"
+| top section
 ```
 Extracts the first path segment (e.g. `product`, `cart`, `joomla`…) so you can profile what parts of the site are hit.
 
@@ -158,19 +168,22 @@ Extracts the first path segment (e.g. `product`, `cart`, `joomla`…) so you can
 
 ### Q18 Multiple aggregates in one stats
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | stats count avg(bytes) max(bytes) min(bytes)
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| stats count avg(bytes) max(bytes) min(bytes)
 ```
 08/23: count **54,033**, avg ≈ **12,910** bytes, max **183,314**, min **6**. One `stats` carries many functions.
 
 ### Q19 Distinct clients
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | stats dc(clientip) as clients
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| stats dc(clientip) as clients
 ```
 **34** unique client IPs on 08/23 — small enough to eyeball each later.
 
 ### Q20 timechart split by status
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" status=* | timechart span=1h count by status
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" status=*
+| timechart span=1h count by status
 ```
 One column per status (200/302/304/403/404). The `4xx` line rises during scanning windows. `status=*` matters — ~41,742 field-less rows that day would otherwise distort the chart (see Q37).
 
@@ -182,48 +195,65 @@ One column per status (200/302/304/403/404). The `4xx` line rises during scannin
 
 ### Q21 — Calculated field
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | eval kb=round(bytes/1024,1) | sort - kb | table _time clientip uri kb
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| eval kb=round(bytes/1024,1)
+| sort - kb
+| table _time clientip uri kb
 ```
 
 ### Q22 `case()` status classes — and a real trap
 ```spl
 index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
-| eval class=case(status<300,"2xx",status<400,"3xx",status<500,"4xx",true(),"5xx") | stats count by class
+| eval class=case(status<300,"2xx",status<400,"3xx",status<500,"4xx",true(),"5xx")
+| stats count by class
 ```
 Naive result: `2xx 11359 · 3xx 357 · 4xx 575 · 5xx 41742`. ⚠️ **That 5xx is a lie.** Verified: those 41,742 rows have **NULL `status`** (see Q8) — the `true()` catch-all swept every field-less event into "5xx". Real 5xx ≈ 0.
 **Fix — filter to rows that actually have the field, and make the catch-all honest:**
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" status=* | eval class=case(status<300,"2xx",status<400,"3xx",status<500,"4xx",status<600,"5xx",true(),"other") | stats count by class
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" status=*
+| eval class=case(status<300,"2xx",status<400,"3xx",status<500,"4xx",status<600,"5xx",true(),"other")
+| stats count by class
 ```
 Lesson: a `true()` branch silently absorbs nulls/unexpected values. Gate on `status=*` (or add an explicit `null`/`other` bucket) when the value drives a metric — same discipline as choosing `case()` over a blind `if()` else.
 
 ### Q23 — Conditional counting
 ```spl
 index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" status=*
-| stats count as total count(eval(status>=400)) as errors by clientip | eval err_rate=round(errors/total*100,1) | sort - err_rate
+| stats count as total count(eval(status>=400)) as errors by clientip
+| eval err_rate=round(errors/total*100,1)
+| sort - err_rate
 ```
 `count(eval(<cond>))` counts only rows matching the condition — one pass, no subsearch. Verified top error-rate clients on 08/23: `204.194.143.30` (22.8%), `71.39.18.121` (22.7%), `107.3.17.56` (20.3%). (Add `status=*` so null-status rows don't skew `total`.)
 
 ### Q24 — String functions
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | eval ua=lower(useragent) | stats count by ua
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| eval ua=lower(useragent)
+| stats count by ua
 ```
 `lower()` normalizes so `Mozilla` and `mozilla` group together; also useful: `len()`, `substr()`, `mvindex()`, `split()`.
 
 ### Q25 — Named groups from URI
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | rex field=uri "^/(?<section>[^/?]+)" | rex field=uri "[?&]id=(?<id>[^&]+)" | table uri section id
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| rex field=uri "^/(?<section>[^/?]+)"
+| rex field=uri "[?&]id=(?<id>[^&]+)"
+| table uri section id
 ```
 
 ### Q26 — exe from Sysmon Image
 ```spl
-index=botsv2 sourcetype=*ysmon* EventCode=1 earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00" | rex field=Image "\\\\(?<exe>[^\\\\]+)$" | top exe
+index=botsv2 sourcetype=*ysmon* EventCode=1 earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00"
+| rex field=Image "\\\\(?<exe>[^\\\\]+)$"
+| top exe
 ```
 Windows path separators are `\`, which must be escaped (`\\\\` in the SPL string → `\\` regex → literal `\`).
 
 ### Q27 — sed-mode redaction
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | rex field=uri mode=sed "s/\?.*//" | stats count by uri
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| rex field=uri mode=sed "s/\?.*//"
+| stats count by uri
 ```
 Strips query strings so `/x?id=1` and `/x?id=2` collapse to `/x`.
 
@@ -235,7 +265,9 @@ Reads indexed fields → fast on 226M events; use instead of raw `| timechart` w
 
 ### Q29 — metadata recon
 ```spl
-| metadata type=sourcetypes index=botsv2 | eval firstTime=strftime(firstTime,"%F %T"), lastTime=strftime(lastTime,"%F %T") | table sourcetype totalCount firstTime lastTime recentTime
+| metadata type=sourcetypes index=botsv2
+| eval firstTime=strftime(firstTime,"%F %T"), lastTime=strftime(lastTime,"%F %T")
+| table sourcetype totalCount firstTime lastTime recentTime
 ```
 
 ### Q30 — tstats by host+sourcetype
@@ -246,62 +278,90 @@ Shows which host owns which telemetry (e.g. `cassiopeia` heavy on perfmon/mysql;
 
 ### Q31 — subsearch pivot
 ```spl
-index=botsv2 sourcetype=stream:dns [ | tstats count where index=botsv2 sourcetype=*ysmon* by host | sort - count | head 1 | fields host ]
+index=botsv2 sourcetype=stream:dns [
+| tstats count where index=botsv2 sourcetype=*ysmon* by host
+| sort - count
+| head 1
+| fields host ]
 | stats count by query{}
 ```
 Subsearch resolves first, returns `host=<top>`, injected as a filter. Keep it tiny (subsearches are row/time-capped).
 
 ### Q32 — stats→eval→where
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | stats count as total count(eval(status>=400)) as errors by clientip | eval rate=errors/total | where total>100 AND rate>0.5
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| stats count as total count(eval(status>=400)) as errors by clientip
+| eval rate=errors/total
+| where total>100 AND rate>0.5
 ```
 `where` filters *after* aggregation (on computed fields) — different from `search`, which filters raw events.
 
 ### Q33 — eventstats z-score
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | bin _time span=1m | stats count by _time clientip | eventstats avg(count) as avg stdev(count) as sd | where count > avg + 3*sd
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| bin _time span=1m
+| stats count by _time clientip
+| eventstats avg(count) as avg stdev(count) as sd
+| where count > avg + 3*sd
 ```
 `eventstats` adds the aggregate back onto every row (unlike `stats`, which collapses) — that's what lets you compare each row to the baseline. Seed of an anomaly detection.
 
 ### Q34 — transaction vs stats
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | transaction clientip maxpause=5m | eval dur=duration, n=eventcount
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| transaction clientip maxpause=5m
+| eval dur=duration, n=eventcount
 ```
 Use `transaction` only when you need grouped/ordered events or duration; for plain counts `stats by clientip` is far cheaper.
 
 ### Q35 iplocation enrichment
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | iplocation clientip | stats count by Country | sort - count
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| iplocation clientip
+| stats count by Country
+| sort - count
 ```
 Verified 08/23: United States 11,399, **Mauritius 860**, Indonesia 17, Germany 15. The Mauritius cluster is an odd outlier for a US brewery — the kind of geo anomaly worth a second look.
 
 ### Q36 Busiest hour (`strftime`)
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | eval hour=strftime(_time,"%H") | stats count by hour | sort - count
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| eval hour=strftime(_time,"%H")
+| stats count by hour
+| sort - count
 ```
 Peak hour **09** (4,009), then **17** (3,819), **10** (3,817). `strftime(_time,"%H")` buckets by hour-of-day regardless of date; `strptime` is the inverse (string → epoch).
 
 ### Q37 Missing-status count (the trap, quantified)
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | stats count(status) as have count as total | eval missing=total-have
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| stats count(status) as have count as total
+| eval missing=total-have
 ```
 08/23: have **12,291**, total **54,033**, **missing 41,742**. Those field-less rows are exactly what a `case()`/`true()` catch-all (Q22) mislabels "5xx". `count(field)` counts only rows where the field exists — gate on `status=*` whenever `status` drives a metric.
 
 ### Q38 `values()` + `dc()` scanner profile
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | stats dc(uri) as uris values(method) as methods count by clientip | sort - uris
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| stats dc(uri) as uris values(method) as methods count by clientip
+| sort - uris
 ```
 Top: `4.14.104.185` (102 distinct URIs, `GET`+`POST`, 2,005 hits), `98.116.39.236` (62), `68.99.6.195` (55). High `uris` + both methods = app crawling.
 
 ### Q39 — `streamstats` running total
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | bin _time span=1h | stats count by _time | streamstats sum(count) as running_total
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| bin _time span=1h
+| stats count by _time
+| streamstats sum(count) as running_total
 ```
 `streamstats` adds a cumulative column *as it walks the rows* — unlike `eventstats`, which broadcasts one global aggregate to every row. Use it for running totals and "Nth-so-far" logic.
 
 ### Q40 `match()` SQLi flag
 ```spl
-index=botsv2 sourcetype=stream:http src_ip="45.77.65.211" earliest="08/23/2017:00:00:00" latest="08/26/2017:00:00:00" | eval sqli=if(match(form_data,"(?i)updatexml|union.*select"),1,0) | stats sum(sqli) as sqli_hits count
+index=botsv2 sourcetype=stream:http src_ip="45.77.65.211" earliest="08/23/2017:00:00:00" latest="08/26/2017:00:00:00"
+| eval sqli=if(match(form_data,"(?i)updatexml|union.*select"),1,0)
+| stats sum(sqli) as sqli_hits count
 ```
 **136** SQLi hits (of 8,966 events from that source) — the `updatexml` error-based injection on `/member.php`. ⚠️ Scope to the attacker `src_ip`: `match()` over the whole web index drowns in noise and can misfire on multivalue `form_data`.
 
@@ -318,30 +378,39 @@ index=botsv2 sourcetype=wineventlog:security EventCode=4688 earliest="08/24/2017
 
 ### Q42 Logons (4624/4625)
 ```spl
-index=botsv2 sourcetype=wineventlog:security (EventCode=4624 OR EventCode=4625) earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00" | stats count by EventCode ComputerName
+index=botsv2 sourcetype=wineventlog:security (EventCode=4624 OR EventCode=4625) earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00"
+| stats count by EventCode ComputerName
 ```
 4625 = failed logon; a spike on one host flags a credential attack.
 
 ### Q43 Sysmon detail
 ```spl
-index=botsv2 sourcetype=*ysmon* EventCode=1 host=wrk-* earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00" | table _time host Image CommandLine ParentImage | sort _time
+index=botsv2 sourcetype=*ysmon* EventCode=1 host=wrk-* earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00"
+| table _time host Image CommandLine ParentImage
+| sort _time
 ```
 Sysmon gives the `CommandLine`/hashes that 4688 lacks here (fields via the lab add-on).
 
 ### Q44 — Web
 ```spl
-index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | stats count by status method | sort - count
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| stats count by status method
+| sort - count
 ```
 
 ### Q45 DNS (JSON stream)
 ```spl
-index=botsv2 sourcetype=stream:dns earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" | stats count by query{} | sort - count
+index=botsv2 sourcetype=stream:dns earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| stats count by query{}
+| sort - count
 ```
 Group by `query{}` (always-present question field). Verified 08/23 top: **`FHFAEBEECACACACACACACACACACACAAA`** (6,276 — a **NetBIOS-encoded** name, i.e. noise), then real domains `outlook.office365.com`, `wpad`, `manage.office.com`, `nexus.officeapps.live.com`. Lesson: the noisiest `query{}` is often NetBIOS/WPAD junk — filter it (`| regex "query{}"="\."` drops dot-less NetBIOS names) before hunting.
 
 ### Q46 Suricata
 ```spl
-index=botsv2 sourcetype=suricata alert.signature=* earliest=0 | stats count by alert.signature alert.category | sort - count
+index=botsv2 sourcetype=suricata alert.signature=* earliest=0
+| stats count by alert.signature alert.category
+| sort - count
 ```
 Top: `ET SCAN … Port 135` (5,330), TLS/TOR, `ET POLICY Vulnerable Java`, and **`ET TROJAN OSX Backdoor Quimitchin DNS Lookup`** — the macOS malware pointer for Stage 4.
 
@@ -349,7 +418,9 @@ Top: `ET SCAN … Port 135` (5,330), TLS/TOR, `ET POLICY Vulnerable Java`, and *
 No auto-fields. Read `_raw` (comma-separated), then extract. Example raw:
 `… ,TRAFFIC,end,1,…,10.0.2.101,10.0.1.100,…,frothly.local\amber.turing,,dns,…`
 ```spl
-index=botsv2 sourcetype=pan:traffic | rex "TRAFFIC,\w+,\d+,[^,]+,(?<src_ip>[^,]+),(?<dest_ip>[^,]+)" | stats count by src_ip dest_ip
+index=botsv2 sourcetype=pan:traffic
+| rex "TRAFFIC,\w+,\d+,[^,]+,(?<src_ip>[^,]+),(?<dest_ip>[^,]+)"
+| stats count by src_ip dest_ip
 ```
 Domain is `frothly.local`; users appear as `frothly.local\<user>` (e.g. `amber.turing`).
 
@@ -374,7 +445,9 @@ DB server = **`cassiopeia`** (~61M MySQL events — it dominates the whole index
 
 ### Q52 — Correlate a host
 ```spl
-index=botsv2 host=wrk-bgist (sourcetype=*ysmon* OR sourcetype=wineventlog:security OR sourcetype=stream:dns) earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00" | sort _time | table _time sourcetype EventCode Image query{}
+index=botsv2 host=wrk-bgist (sourcetype=*ysmon* OR sourcetype=wineventlog:security OR sourcetype=stream:dns) earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00"
+| sort _time
+| table _time sourcetype EventCode Image query{}
 ```
 
 ### Q53 Asset picture
@@ -421,7 +494,9 @@ sourcetype=osquery_results host=kutekitten "columns.path"="/Users/mkraeusen*" | 
 
 ### Q60 One indicator, six sources
 ```spl
-index=botsv2 "45.77.65.211" earliest="08/01/2017:00:00:00" latest="09/01/2017:00:00:00" | stats count by sourcetype | sort - count
+index=botsv2 "45.77.65.211" earliest="08/01/2017:00:00:00" latest="09/01/2017:00:00:00"
+| stats count by sourcetype
+| sort - count
 ```
 The C2 IP appears in **`pan:traffic`** (48,397), **`suricata`** (38,313), **`stream:tcp`** (29,069), `stream:ip` (29,060), `stream:http` (9,712), `access_combined` (4,854). One indicator confirmed by six independent telemetry sources = the report-grade backbone you build on in Stage 4.
 

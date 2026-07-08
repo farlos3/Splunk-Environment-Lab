@@ -8,7 +8,8 @@ Questions: [../question/04-privilege-escalation-detection.md](../question/04-pri
 ### Steps 1–3 — Alert, event details, affected changes
 ```spl
 index=botsv2 sourcetype=wineventlog:security EventCode IN (4728,4732)
-| table _time ComputerName EventCode Message | sort _time
+| table _time ComputerName EventCode Message
+| sort _time
 ```
 Verified chain, all `2017-08-24`:
 
