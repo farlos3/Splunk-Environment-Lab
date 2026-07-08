@@ -45,6 +45,7 @@ fields out of it*. Crucial lesson up front:
 **Hint:** Filter to `EventCode=4688`, then `stats count by ComputerName` and `sort` descending. Note `ComputerName` carries the `…frothly.local` FQDN.
 
 ### Q42 — Logon success/failure (4624 / 4625)
+Also on `sourcetype=wineventlog:security`.
 **Hint:** Filter to `EventCode=4624 OR EventCode=4625`, then `stats count by EventCode ComputerName`. A 4625 spike on one host = credential attack.
 
 ### Q43 — Sysmon process detail

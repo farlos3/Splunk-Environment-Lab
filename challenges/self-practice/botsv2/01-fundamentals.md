@@ -54,7 +54,7 @@ Scope to a single day and use `top`.
 **Hint:** Set the window to `08/23/2017 00:00:00` → `08/24/2017 00:00:00` (see the table above), then `top clientip` on `sourcetype=access_combined`. `top` gives you the ranked list + percentages for free.
 
 ### Q8 — Break down web requests by HTTP status and method.
-**Hint:** Same `08/23/2017` window as Q7. `stats count by status method` on the web logs, then `sort` descending. Which statuses dominate? Any `4xx`/`5xx` spikes?
+**Hint:** Same `08/23/2017` window and `sourcetype=access_combined` as Q7. `stats count by status method`, then `sort` descending. Which statuses dominate? Any `4xx`/`5xx` spikes?
 
 ### Q9 — Chart events per day for one noisy sourcetype.
 **Hint:** `timechart span=1d count` on `sourcetype=suricata`. (~2M events — still set a window if it drags.)
@@ -63,19 +63,22 @@ Scope to a single day and use `top`.
 **Hint:** `tstats count by host`, filtered to the Sysmon sourcetype (`*ysmon*`). (Sysmon field extraction is supplied by the lab add-on, like v1.)
 
 ### Q11 — Show 10 raw web events as a clean table.
+On `sourcetype=access_combined` (same `08/23/2017` window as Q7).
 **Hint:** `table` only the columns you care about (`_time`, `clientip`, `method`, `uri`, `status`), then `head 10`.
 
 ### Q12 — Unique URIs requested on the web server (one day).
-**Hint:** Same `08/23/2017 00:00:00` → `08/24/2017 00:00:00` window as Q7. `dc(uri)` gives the count; `stats count by uri | sort` shows the popular ones; `dedup uri` lists them. Pick the one that answers what you're asking.
+**Hint:** On `sourcetype=access_combined`, same `08/23/2017 00:00:00` → `08/24/2017 00:00:00` window as Q7. `dc(uri)` gives the count; `stats count by uri | sort` shows the popular ones; `dedup uri` lists them. Pick the one that answers what you're asking.
 
 ### Q13 — Sort & limit: the 5 rarest User-Agents.
+On `sourcetype=access_combined` (same `08/23/2017` window).
 **Hint:** `stats count by useragent`, then `sort` *ascending* (`sort count`, no `-`) and `head 5`. Rare UAs are where recon tools hide.
 
 ### Q14 — `eval`: bucket requests into success vs. error.
+On `sourcetype=access_combined` (same `08/23/2017` window).
 **Hint:** `eval` a new field using `if(status>=400,"error","ok")`, then `stats count by` it. Once that clicks, redo it with `case()` for 2xx/3xx/4xx/5xx buckets.
 
 ### Q15 — `rex`: pull a field out of a raw string.
-Extract the top-level path segment from the URI.
+On `sourcetype=access_combined` (same `08/23/2017` window), extract the top-level path segment from `uri`.
 **Hint:** `rex field=uri` with a named capture group for the first `/segment`, then `top` it. `rex` is the one regex you must own — everything else is optional.
 
 ### Q16 — `rare` / ascending sort: the least-common sourcetypes.
@@ -85,11 +88,11 @@ Extract the top-level path segment from the URI.
 **Hint:** `tstats count` with a `host=cassiopeia` filter and the `08/24/2017 00:00:00` → `08/25/2017 00:00:00` window from the table above. Notice just how many events one host emits in a single day — that's why you scope.
 
 ### Q18 — Several aggregates in one `stats`.
-On the web logs, `08/23/2017 00:00:00` → `08/24/2017 00:00:00`, get count + average/max/min response size together.
+On `sourcetype=access_combined`, `08/23/2017 00:00:00` → `08/24/2017 00:00:00`, get count + average/max/min response size together.
 **Hint:** One `stats` can hold many functions side by side — `count`, `avg(bytes)`, `max(bytes)`, `min(bytes)`.
 
 ### Q19 — Distinct count (`dc`).
-How many *unique* client IPs hit the web server on `08/23/2017`?
+On `sourcetype=access_combined`, how many *unique* client IPs hit the web server on `08/23/2017`?
 **Hint:** `dc(clientip)` is your "how many *different*?" tool (a small, countable set here).
 
 ### Q20 — `timechart` split by a field.

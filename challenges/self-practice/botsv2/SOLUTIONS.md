@@ -220,10 +220,10 @@ Lesson: a `true()` branch silently absorbs nulls/unexpected values. Gate on `sta
 ```spl
 index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" status=*
 | stats count as total count(eval(status>=400)) as errors by clientip
-| eval err_rate=round(errors/total*100,1)
+| eval err_rate=round(errors/total*100,2)
 | sort - err_rate
 ```
-`count(eval(<cond>))` counts only rows matching the condition — one pass, no subsearch. Verified top error-rate clients on 08/23: `204.194.143.30` (22.8%), `71.39.18.121` (22.7%), `107.3.17.56` (20.3%). (Add `status=*` so null-status rows don't skew `total`.)
+`count(eval(<cond>))` counts only rows matching the condition — one pass, no subsearch. The `2` in `round(...,2)` is the decimal-places argument — it rounds `err_rate` to 2 digits after the decimal point (e.g. `22.834...` → `22.83`), not a filter or threshold. Verified top error-rate clients on 08/23: `204.194.143.30` (22.83%), `71.39.18.121` (22.69%), `107.3.17.56` (20.31%). (Add `status=*` so null-status rows don't skew `total`.)
 
 ### Q24 — String functions
 ```spl
