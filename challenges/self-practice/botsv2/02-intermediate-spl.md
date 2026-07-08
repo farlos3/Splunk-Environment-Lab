@@ -58,10 +58,12 @@ On `sourcetype=access_combined`, mask everything after `?` in `uri` for cleaner 
 
 ### Q28 — `tstats` with a time chart
 Count events per hour for `sourcetype=suricata`, *without* a slow raw search.
-**Hint:** `tstats count … by _time span=1h`. `tstats` reads the indexed fields — orders of magnitude faster than a raw `timechart` on 226M events.
+**Why `tstats` (not a raw `timechart`):** a raw `index=botsv2 sourcetype=suricata | timechart span=1h count` has to open and read every matching *event* to produce the count. `tstats` instead reads straight from the **tsidx files** — the lightweight index Splunk already built mapping each indexed field (`sourcetype`, `host`, and any accelerated data-model fields) to which events contain it — so it counts by *lookup*, never touching the raw event text. That's why it's "orders of magnitude faster": on 226M events, a raw search scans real data while `tstats` just counts index entries. The tradeoff: `tstats` can only use fields Splunk indexes at search time by default (`sourcetype`, `host`, `source`, `_time`, plus anything from an accelerated data model) — it can't read a field buried in `_raw` that nothing has extracted yet (that's still a job for a raw search or `rex`).
+**Hint:** `tstats count … by _time span=1h`.
 
 ### Q29 — `metadata` for recon
 When did each sourcetype first and last appear?
+**Why `metadata` (not `tstats` or a raw search):** Splunk tracks first-seen/last-seen/event-count per sourcetype, host, and source at the *bucket* level, as part of the index's own housekeeping — `metadata` just reads that bookkeeping straight off, without touching a single event or even a tsidx lookup. That makes it the cheapest command in Splunk, cheaper even than `tstats`. It's also why it's the natural **first move on any dataset you don't know yet**: before you've decided what to search for, `metadata` tells you what sourcetypes exist and when their data actually lands, so you don't waste a real search on a time range or sourcetype that's empty.
 **Hint:** `metadata type=sourcetypes index=botsv2`, then `strftime` the `firstTime`/`lastTime` epoch fields so they're readable.
 
 ### Q30 — `tstats` grouped by two fields
