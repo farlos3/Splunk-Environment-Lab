@@ -267,7 +267,7 @@ Reads indexed fields → fast on 226M events; use instead of raw `| timechart` w
 ```spl
 | metadata type=sourcetypes index=botsv2
 | eval firstTime=strftime(firstTime,"%F %T"), lastTime=strftime(lastTime,"%F %T")
-| table sourcetype totalCount firstTime lastTime recentTime
+| table sourcetype totalCount firstTime lastTime
 ```
 
 ### Q30 — tstats by host+sourcetype
