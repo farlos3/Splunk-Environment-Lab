@@ -321,13 +321,15 @@ Verified on 08/23: **84** `(minute, client)` buckets clear the 3σ bar, the bigg
 index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
 | transaction clientip maxpause=5m
 | sort - eventcount
+| eval duration=tostring(duration,"duration")
 | table clientip duration eventcount
 ```
 **The three pieces to know:**
 - **`maxpause=5m`** — the session-gap rule: within one `clientip`, start a *new* transaction whenever two consecutive events are more than 5 minutes apart (the client went quiet, so the session ended). Siblings: `maxspan` (cap a session's total length), `maxevents` (cap its event count), `startswith`/`endswith` (begin/end a session on a marker event).
-- **`duration`** and **`eventcount`** — fields `transaction` *auto-creates* on every output session: `duration` = seconds from the first to the last event in that session; `eventcount` = how many events it grouped. You don't define them — you just use them (here, `sort - eventcount` to surface the biggest bursts). *(An `eval dur=duration, n=eventcount` would only rename them to shorter aliases — it computes nothing new, so prefer to actually `sort`/`where`/`table` on them.)*
+- **`duration`** and **`eventcount`** — fields `transaction` *auto-creates* on every output session: `duration` = seconds from the first to the last event in that session; `eventcount` = how many events it grouped. You don't define them — you just use them (here, `sort - eventcount` to surface the biggest bursts).
+- **`tostring(duration,"duration")`** — `duration` comes back as raw seconds (e.g. `14620`), which is hard to read. The `"duration"` conversion type turns it into a readable `HH:MM:SS` clock (`14620` → `04:03:40`); overwriting the field in place (`eval duration=…`) keeps the column name tidy. (For values over a day it becomes `D+HH:MM:SS`.)
 
-Verified on 08/23, the biggest burst session is **`98.116.39.236`** — **322 requests in one ~4-hour session** (`duration` 14,620 s), then a second ~309-request session; `4.14.104.185` shows several ~100-request sessions. Those tight bursts are exactly what a plain `stats count by clientip` would flatten into a single number.
+Verified on 08/23, the biggest burst session is **`98.116.39.236`** — **322 requests in one session lasting `04:03:40`** (14,620 s), then a second ~309-request session (`03:44:52`); `4.14.104.185` shows several ~100-request sessions of `00:24:21` each. Those tight bursts are exactly what a plain `stats count by clientip` would flatten into a single number.
 
 **`stats` aggregates; `transaction` stitches.** `stats` collapses events into summary rows and discards the individual events and their order — cheap, distributable, scales to 226M events. `transaction` keeps events grouped *in order*, honours time rules (`maxpause`/`maxspan`/`startswith`/`endswith`), and derives `duration` + `eventcount` — but it runs on the search head, holds events in memory, and silently caps very large transactions, so it's far more expensive.
 
