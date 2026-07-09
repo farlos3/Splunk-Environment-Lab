@@ -294,9 +294,11 @@ Subsearch resolves first, returns `host=<top>`, injected as a filter. Keep it ti
 index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
 | stats count as total count(eval(status>=400)) as errors by clientip
 | eval rate=errors/total
-| where total>100 AND rate>0.5
+| where total>100 AND rate>0.2
 ```
-`where` filters *after* aggregation (on computed fields) — different from `search`, which filters raw events.
+`where` filters *after* aggregation (on the computed `total`/`rate` fields) — different from `search`, which filters raw events *before* `stats`. Returns the 3 clients with a >20% error rate on 08/23: `204.194.143.30` (42/184 = **0.228**), `71.39.18.121` (**0.227**), `107.3.17.56` (**0.203**).
+
+⚠️ **The threshold is data-dependent — don't copy a round number.** A `rate>0.5` (50%) filter returns **zero rows** here: this dataset's *highest* client error rate is only ~23%, so nothing clears 50%. "High" is relative to the baseline — look at the spread first (`… | where total>100 | sort - rate`), then pick a cutoff that isolates the tail. (If your search shows *No results found* on a `where`, the query is fine; your threshold just didn't match the data.)
 
 ### Q33 — eventstats z-score
 ```spl
@@ -306,7 +308,13 @@ index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="0
 | eventstats avg(count) as avg stdev(count) as sd
 | where count > avg + 3*sd
 ```
-`eventstats` adds the aggregate back onto every row (unlike `stats`, which collapses) — that's what lets you compare each row to the baseline. Seed of an anomaly detection.
+**What each step does and why:**
+- **`bin _time span=1m`** — rounds every event's `_time` *down* to its 1-minute slot (`14:30:41` → `14:30:00`), so all events in the same minute now share one `_time` value. Without this you couldn't group "per minute" — raw `_time` is unique to the millisecond.
+- **`stats count by _time clientip`** — one row per *(minute, client)* = "how many requests did this client make in this minute." This is the per-row metric you want to test for spikes.
+- **`eventstats avg(count) stdev(count)`** — computes the average and standard deviation *across all those rows*, then — unlike `stats`, which collapses everything into one summary row — **writes those two numbers back onto every row as new columns** (`avg`, `sd`). That's the whole point of `eventstats`: each row now carries the global baseline next to its own value, so the next command can compare the two. (`stats` would give you the average but throw away the individual rows; you'd have nothing left to flag.)
+- **`where count > avg + 3*sd`** — keeps only rows more than 3 standard deviations above the mean — the "3-sigma" / z-score rule. Statistically ~99.7% of normal minutes fall inside 3σ, so what's left is the genuinely abnormal bursts.
+
+Verified on 08/23: **84** `(minute, client)` buckets clear the 3σ bar, the biggest a **25-requests-in-one-minute** spike — the seed of an automated anomaly detection (Stage 4).
 
 ### Q34 — transaction vs stats
 ```spl

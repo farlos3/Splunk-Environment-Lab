@@ -82,11 +82,16 @@ Find DNS queries made by whatever host was noisiest in Sysmon.
 
 ### Q32 — `stats` then `eval` then `where`
 On `sourcetype=access_combined`, find clients whose error rate is high **and** volume is non-trivial.
-**Hint:** Build the same error-rate `stats` as Q23, then `where` filters *after* aggregation on the computed fields (e.g. `total>100 AND rate>0.5`) — different from `search`, which filters raw events before `stats`.
+**Hint:** Build the same error-rate `stats` as Q23, then `where` filters *after* aggregation on the computed `total`/`rate` fields — different from `search`, which filters raw events *before* `stats`. ⚠️ **Pick the threshold from the data, not a round number.** This dataset's *highest* client error rate on 08/23 is only ~23%, so a `rate>0.5` (50%) cutoff returns **nothing** — `where` filtering a real query down to *No results found* usually means your threshold is wrong, not your SPL. Try `total>100 AND rate>0.2` to surface the actual outliers.
 
 ### Q33 — `eventstats` / `streamstats` for baselining
 On `sourcetype=access_combined`, flag requests from a client whose per-minute rate is far above the average.
-**Hint:** `bin _time span=1m`, `stats count by _time clientip`, then `eventstats avg`/`stdev` to add the baseline onto *every* row so you can `where count > avg + 3*sd`. That z-score is the seed of an anomaly detection (Stage 4).
+**What each piece is for:**
+- **`bin _time span=1m`** rounds every event's `_time` down to its 1-minute slot so events in the same minute share one timestamp — that's what lets you then count *per minute*. (Raw `_time` is unique to the millisecond, so you can't group on it directly.)
+- **`stats count by _time clientip`** turns that into one row per *(minute, client)* = how many requests each client made each minute.
+- **`eventstats avg(count) stdev(count)`** is the key move: it computes the average and standard deviation across those rows and — unlike `stats`, which collapses everything into a single summary row — **writes those numbers back onto *every* row** as new columns. That's why you need `eventstats` and not `stats` here: you want each row to carry the baseline next to its own value so the next command can compare the two. (`stats` would give you the average but discard the rows you're trying to test.)
+
+**Hint:** `bin` → `stats count by _time clientip` → `eventstats avg`/`stdev` → `where count > avg + 3*sd`. The `3*sd` is the "3-sigma" rule: ~99.7% of normal minutes sit within 3 standard deviations of the mean, so what clears it is genuinely abnormal. That z-score is the seed of an anomaly detection (Stage 4).
 
 ### Q34 — `transaction` vs `stats` (know when to use which)
 On `sourcetype=access_combined`, group a client's requests into sessions by a 5-minute gap.
