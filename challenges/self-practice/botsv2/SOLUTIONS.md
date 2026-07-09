@@ -320,9 +320,25 @@ Verified on 08/23: **84** `(minute, client)` buckets clear the 3σ bar, the bigg
 ```spl
 index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
 | transaction clientip maxpause=5m
-| eval dur=duration, n=eventcount
+| sort - eventcount
+| table clientip duration eventcount
 ```
-Use `transaction` only when you need grouped/ordered events or duration; for plain counts `stats by clientip` is far cheaper.
+**The three pieces to know:**
+- **`maxpause=5m`** — the session-gap rule: within one `clientip`, start a *new* transaction whenever two consecutive events are more than 5 minutes apart (the client went quiet, so the session ended). Siblings: `maxspan` (cap a session's total length), `maxevents` (cap its event count), `startswith`/`endswith` (begin/end a session on a marker event).
+- **`duration`** and **`eventcount`** — fields `transaction` *auto-creates* on every output session: `duration` = seconds from the first to the last event in that session; `eventcount` = how many events it grouped. You don't define them — you just use them (here, `sort - eventcount` to surface the biggest bursts). *(An `eval dur=duration, n=eventcount` would only rename them to shorter aliases — it computes nothing new, so prefer to actually `sort`/`where`/`table` on them.)*
+
+Verified on 08/23, the biggest burst session is **`98.116.39.236`** — **322 requests in one ~4-hour session** (`duration` 14,620 s), then a second ~309-request session; `4.14.104.185` shows several ~100-request sessions. Those tight bursts are exactly what a plain `stats count by clientip` would flatten into a single number.
+
+**`stats` aggregates; `transaction` stitches.** `stats` collapses events into summary rows and discards the individual events and their order — cheap, distributable, scales to 226M events. `transaction` keeps events grouped *in order*, honours time rules (`maxpause`/`maxspan`/`startswith`/`endswith`), and derives `duration` + `eventcount` — but it runs on the search head, holds events in memory, and silently caps very large transactions, so it's far more expensive.
+
+**Concrete difference (verified, client `204.194.143.30` on 08/23):**
+- `| stats count by clientip` → **1 row**: 184 requests spanning one ~22-hour range.
+- `| transaction clientip maxpause=5m` → **44 rows**: the same 184 requests split into 44 separate *sessions* (avg ~4 requests each) — the client kept returning in bursts with >5-minute gaps between them. That burst structure is exactly what `stats` throws away and `transaction` preserves.
+
+**Rule of thumb:** default to `stats`; reach for `transaction` only when you need the session boundaries or the ordered events within a session. If you just want count + duration per group (no ordering), `stats` does it cheaper — one row per client, the whole day as a single span:
+```spl
+… | stats count as n range(_time) as duration by clientip
+```
 
 ### Q35 iplocation enrichment
 ```spl

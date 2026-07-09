@@ -95,7 +95,12 @@ On `sourcetype=access_combined`, flag requests from a client whose per-minute ra
 
 ### Q34 — `transaction` vs `stats` (know when to use which)
 On `sourcetype=access_combined`, group a client's requests into sessions by a 5-minute gap.
-**Hint:** `transaction clientip maxpause=5m` groups events into sessions with `duration`/`eventcount`. Then reflect: `stats` is faster/cheaper — reach for `transaction` only when you truly need event grouping/ordering.
+**How they differ:**
+- **`stats` aggregates** — it collapses matching events into one summary row per group and throws the individual events (and their order) away. It's cheap and runs *distributed* across the indexers, so it scales to hundreds of millions of events.
+- **`transaction` stitches** — it keeps the events that belong together *as a group, in order*, and derives `duration` (last − first event time) and `eventcount`. The grouping isn't just "same field value" — it also honours time rules like `maxpause` (start a new session when the gap exceeds N), `maxspan`, or `startswith`/`endswith` markers. It runs on the search head, holds events in memory, and silently caps very large transactions — so it's much more expensive.
+
+**When to use which:** default to `stats`. Reach for `transaction` *only* when you genuinely need the session structure or the ordered events inside a session — something `stats` can't express (e.g. "split one client's traffic into separate bursts whenever it goes quiet for 5 minutes"). If all you want is a count or total duration per group, `stats count, range(_time) as duration by clientip` does it far cheaper, no `transaction` needed.
+**Hint:** `transaction clientip maxpause=5m` gives `duration`/`eventcount` per session. Compare its row count to a plain `stats … by clientip` on the same client — notice how many separate *sessions* one client splits into.
 
 ### Q35 — `lookup`-style enrichment with `iplocation`
 On `sourcetype=access_combined`, geo-locate the top external web clients.
