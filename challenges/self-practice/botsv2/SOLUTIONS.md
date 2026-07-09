@@ -351,6 +351,19 @@ index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="0
 ```
 Verified 08/23: United States 11,399, **Mauritius 860**, Indonesia 17, Germany 15. The Mauritius cluster is an odd outlier for a US brewery — the kind of geo anomaly worth a second look.
 
+**Adding City — `iplocation` returns more than `Country`.** The command enriches each event with `Country`, `City`, `Region`, `lat`, `lon`, etc., so you just add the fields you want to the `by` clause:
+```spl
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| iplocation clientip
+| stats count by Country City
+| sort - count
+```
+Verified 08/23 top rows: `United States / San Francisco` (2,435), `New York` (1,318), `Chicago` (1,030), `Omaha` (1,017), `Edgewater` (922), then **`Mauritius / Ebene CyberCity` (860)**. Adding `City` is what makes the anomaly *actionable*: the Mauritius traffic doesn't just come from "somewhere in Mauritius" — it resolves to one city, and drilling in (`… | search Country=Mauritius | stats count by City clientip`) pins it to two IPs, `196.52.39.2` (554) and `196.52.10.34` (306).
+
+> 💡 Two things to know when you add `City`:
+> - Group `by Country City`, not `by City` alone — city names aren't unique (there's a Portland in Oregon *and* Maine), so the country keeps them distinct.
+> - Not every IP resolves to a city — for some, `iplocation` fills `Country` but leaves `City` empty, and `stats … by City` silently drops those null-city rows. (This particular day happens to resolve *all* 54,033 rows to a city, but on other data gate with `eval City=coalesce(City,"(unknown)")` first so you don't lose events.)
+
 ### Q36 Busiest hour (`strftime`)
 ```spl
 index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
