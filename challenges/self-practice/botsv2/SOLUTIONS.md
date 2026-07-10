@@ -415,6 +415,16 @@ index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="0
 ⚠️ `streamstats` trusts the row order it's handed, so `sort` (or the `bin`+`stats` ordering) *before* it if the sequence matters. Add `by <field>` to run an independent stream per group — e.g. `streamstats count by clientip` numbers each client's requests 1, 2, 3, … separately.
 
 ### Q40 `match()` SQLi flag
+
+**First — how do you even know the scanner is `45.77.65.211`?** You don't assume it; you find it. The instinct to `| top src_ip` on brewertalk traffic **fails here** — by raw request count the busiest source is a legit-looking visitor (`4.14.104.185`, 89k hits), and `45.77.65.211` isn't even in the top 5. A scanner gives itself away not by *volume* but by **path diversity** — it crawls thousands of distinct URLs:
+```spl
+index=botsv2 sourcetype=stream:http www.brewertalk.com
+| stats dc(uri_path) as paths count by src_ip
+| sort - paths
+```
+Verified: **`45.77.65.211` touched 4,022 distinct paths** — the next-highest source hit only **83**. That 50× gap is the scanner. (Two more confirmations: its User-Agent literally contains `w3af.org` (a web-attack framework) and a Shellshock probe string; and 100% of the `updatexml` injection requests come from it.)
+
+Then the actual Q40 — flag and count the SQLi:
 ```spl
 index=botsv2 sourcetype=stream:http src_ip="45.77.65.211" earliest="08/23/2017:00:00:00" latest="08/26/2017:00:00:00"
 | eval sqli=if(match(form_data,"(?i)updatexml|union.*select"),1,0)
