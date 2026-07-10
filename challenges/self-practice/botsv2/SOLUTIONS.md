@@ -11,7 +11,8 @@ result, not a single magic number.
 >
 > | What you're searching | Time picker (set "Between" in the UI) |
 > |---|---|
-> | Web / brewertalk (`access_combined`, SQLi, scan) | `08/23/2017 00:00:00` → `08/24/2017 00:00:00` |
+> | Frothly web server (`access_combined`) | `08/23/2017 00:00:00` → `08/24/2017 00:00:00` |
+> | brewertalk.com scan + SQLi (`stream:http`, Q40) | `08/11/2017 00:00:00` → `08/17/2017 00:00:00` |
 > | Windows endpoint / Sysmon (4688, EID 1, Empire exec) | `08/24/2017 00:00:00` → `08/25/2017 00:00:00` |
 > | APT artifacts (C2, phishing, FTP drop, registry, osquery) | `08/15/2017 00:00:00` → `08/26/2017 00:00:00` |
 > | Counting / discovery (`tstats`, `metadata`) | any / All time — it's fast |
@@ -416,17 +417,19 @@ index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="0
 
 ### Q40 `match()` SQLi flag
 
-**First — how do you even know the scanner is `45.77.65.211`?** You don't assume it; you find it. The instinct to `| top src_ip` on brewertalk traffic **fails here** — by raw request count the busiest source is a legit-looking visitor (`4.14.104.185`, 89k hits), and `45.77.65.211` isn't even in the top 5. A scanner gives itself away not by *volume* but by **path diversity** — it crawls thousands of distinct URLs:
+> ⏱ **Window matters here — and it's NOT the same as the rest of Stage 2.** The brewertalk attack happens on **08/11 (the scan/crawl)** and **08/16 (the SQLi)** — *not* the 08/23 day the other web questions use. Set the picker to `08/11/2017 00:00:00` → `08/17/2017 00:00:00`. Search this on 08/23 and you get **zero results** (the scanner isn't active then) — a perfect example of "0 results = wrong time picker, not wrong SPL."
+
+**First — how do you even know the scanner is `45.77.65.211`?** You don't assume it; you find it. The instinct to `| top src_ip` on brewertalk traffic **fails here** — by raw request count the busiest source is a legit-looking visitor (`4.14.104.185`), and `45.77.65.211` isn't even in the top 5. A scanner gives itself away not by *volume* but by **path diversity** — it crawls thousands of distinct URLs:
 ```spl
-index=botsv2 sourcetype=stream:http www.brewertalk.com
+index=botsv2 sourcetype=stream:http www.brewertalk.com earliest="08/11/2017:00:00:00" latest="08/17/2017:00:00:00"
 | stats dc(uri_path) as paths count by src_ip
 | sort - paths
 ```
-Verified: **`45.77.65.211` touched 4,022 distinct paths** — the next-highest source hit only **83**. That 50× gap is the scanner. (Two more confirmations: its User-Agent literally contains `w3af.org` (a web-attack framework) and a Shellshock probe string; and 100% of the `updatexml` injection requests come from it.)
+Verified: **`45.77.65.211` touched 4,022 distinct paths** — the next-highest source hit only **83**. That 50× gap is the scanner. (Two more confirmations: its User-Agent literally contains `w3af.org` (a web-attack framework) and a Shellshock probe string; and 100% of the `updatexml` injection requests come from it.) Its 8,965 requests are spread across two days: the bulk **path crawl on 08/11**, then the **136-request `updatexml` SQLi run on 08/16**.
 
 Then the actual Q40 — flag and count the SQLi:
 ```spl
-index=botsv2 sourcetype=stream:http src_ip="45.77.65.211" earliest="08/23/2017:00:00:00" latest="08/26/2017:00:00:00"
+index=botsv2 sourcetype=stream:http src_ip="45.77.65.211" earliest="08/11/2017:00:00:00" latest="08/17/2017:00:00:00"
 | eval sqli=if(match(form_data,"(?i)updatexml|union.*select"),1,0)
 | stats sum(sqli) as sqli_hits count
 ```

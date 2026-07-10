@@ -46,7 +46,8 @@ returns *zero results*, not an error. For counting/discovery use
 
 | What you're searching | Time picker (set "Between" in the UI) |
 |---|---|
-| Web / brewertalk (`access_combined`, SQLi, scan) | `08/23/2017 00:00:00` → `08/24/2017 00:00:00` |
+| Frothly web server (`access_combined`) | `08/23/2017 00:00:00` → `08/24/2017 00:00:00` |
+| brewertalk.com scan + SQLi (`stream:http`, Q40) | `08/11/2017 00:00:00` → `08/17/2017 00:00:00` |
 | Windows endpoint / Sysmon (4688, EID 1, Empire exec) | `08/24/2017 00:00:00` → `08/25/2017 00:00:00` |
 | APT artifacts (C2, phishing, FTP drop, registry, osquery) | `08/15/2017 00:00:00` → `08/26/2017 00:00:00` |
 | Counting / discovery (`tstats`, `metadata`) | any / All time — it's fast |

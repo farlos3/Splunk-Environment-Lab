@@ -14,7 +14,7 @@ for raw searches; use `tstats`/`metadata` when you only need counts.
 | Q28–Q31 (`tstats` / `metadata` / subsearch) | **All time** (fast) |
 | Q26 (Sysmon `rex` on `Image`) | `08/24/2017 00:00:00` → `08/25/2017 00:00:00` |
 | Q21–Q25, Q27, Q32–Q39 (web logs) | `08/23/2017 00:00:00` → `08/24/2017 00:00:00` |
-| Q40 (SQLi flag — spans the attack) | `08/23/2017 00:00:00` → `08/26/2017 00:00:00` |
+| Q40 (brewertalk scan + SQLi — its own days) | `08/11/2017 00:00:00` → `08/17/2017 00:00:00` |
 
 > **Hints are nudges, not answers** — they point at the commands and shape.
 > Write the SPL yourself; the full query + verified result is in
@@ -132,7 +132,9 @@ On `sourcetype=access_combined`, add a cumulative event count over time.
 ### Q40 — `match()` to build a boolean flag
 Flag SQL-injection-looking requests to `www.brewertalk.com` from the scanner and count them (~136 hits — the `updatexml` error-based injection on `/member.php`).
 
-> ⚠️ **Sourcetype gotcha:** use **`sourcetype=stream:http`**, *not* `access_combined`. `access_combined` only logs Frothly's *own* web server; `brewertalk.com` is an external site, so it shows up only in Stream's wire-level capture.
+> ⚠️ **Two things differ from the rest of Stage 2:**
+> - **Sourcetype:** use **`sourcetype=stream:http`**, *not* `access_combined` — `access_combined` only logs Frothly's *own* web server; `brewertalk.com` is external, so it lives only in Stream's wire-level capture.
+> - **Time window:** the brewertalk attack is on **08/11 (scan)** and **08/16 (SQLi)** — set the picker to `08/11/2017 00:00:00` → `08/17/2017 00:00:00`. On the usual 08/23 window you get **0 results** (the scanner isn't active then).
 
 **Step 1 — find the scanner (don't assume its IP).**
 - `top src_ip` **won't** work — by raw request count a normal visitor wins and the scanner hides.
