@@ -130,9 +130,19 @@ On `sourcetype=access_combined`, add a cumulative event count over time.
 **Hint:** `bin` into hourly buckets, `stats count by _time`, then `streamstats sum(count)` for the cumulative column. Order matters — `streamstats` trusts the current row order, so `sort` before it if you need a specific sequence.
 
 ### Q40 — `match()` to build a boolean flag
-Flag SQL-injection-looking requests to `www.brewertalk.com` from the scanner and count them.
-**First, find the scanner (don't assume its IP).** Don't `top src_ip` — by raw request count a normal visitor wins and the scanner hides. A scanner's tell is **path diversity**: `stats dc(uri_path) as paths by src_ip | sort - paths`. One IP will have touched *thousands* of distinct URLs while everyone else is in the dozens — that's it. (Its User-Agent gives it away too.)
-**Hint:** ⚠️ **Different sourcetype from the rest of this stage** — use `sourcetype=stream:http`, not `access_combined`. `brewertalk.com` is an external site, not Frothly's own hosted app, so it never shows up in `access_combined` (that sourcetype only covers Frothly's own web server's request log); Stream's wire-level capture is what actually saw the traffic. Once you have the scanner's `src_ip`, scope to it, then `eval` a flag with `if(match(form_data,"(?i)updatexml|union.*select"),1,0)` and `sum()` it. `match(field,"regex")` returns true/false. Scope to the attacker IP — `match()` over the whole web index drowns in noise and can misfire on a multivalue `form_data`. (~136 hits — the `updatexml` error-based injection on `/member.php`.)
+Flag SQL-injection-looking requests to `www.brewertalk.com` from the scanner and count them (~136 hits — the `updatexml` error-based injection on `/member.php`).
+
+> ⚠️ **Sourcetype gotcha:** use **`sourcetype=stream:http`**, *not* `access_combined`. `access_combined` only logs Frothly's *own* web server; `brewertalk.com` is an external site, so it shows up only in Stream's wire-level capture.
+
+**Step 1 — find the scanner (don't assume its IP).**
+- `top src_ip` **won't** work — by raw request count a normal visitor wins and the scanner hides.
+- A scanner's real tell is **path diversity**: `stats dc(uri_path) as paths by src_ip | sort - paths`. One IP will have touched *thousands* of distinct URLs while everyone else is in the dozens — that's your scanner. (Its User-Agent gives it away too.)
+
+**Step 2 — flag and count the SQLi.** Scope to that `src_ip`, then:
+- `eval` a flag: `if(match(form_data,"(?i)updatexml|union.*select"),1,0)` — `match(field,"regex")` returns true/false.
+- `sum()` the flag to count the matches.
+
+⚠️ Scope to the attacker IP first — `match()` over the whole web index drowns in noise and can misfire on a multivalue `form_data`.
 
 ---
 
