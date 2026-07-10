@@ -121,8 +121,13 @@ On `sourcetype=access_combined`, for each web client, list the HTTP methods it u
 **Hint:** One `stats` by `clientip` carrying `dc(uri)`, `values(method)`, and `count`; `sort` by the distinct-URI count. A client with high `uris` and both `GET`+`POST` is crawling the app.
 
 ### Q39 — `streamstats` running total
-On `sourcetype=access_combined`, add a cumulative event count over time (unlike `eventstats`, which adds one global aggregate to every row).
-**Hint:** `bin` into hourly buckets, `stats count by _time`, then `streamstats sum(count)` for a cumulative column. `streamstats` computes *as it walks the rows* — great for running totals / "first N so far" logic.
+On `sourcetype=access_combined`, add a cumulative event count over time.
+**What `streamstats` is for:** it's the third member of the `stats` family, and the difference is *when* the aggregate is computed:
+- **`stats`** collapses rows into summary rows — you lose the individual rows.
+- **`eventstats`** keeps every row but stamps the *same* global aggregate onto all of them (every row sees the grand total — that's the baseline trick in Q33).
+- **`streamstats`** computes the aggregate *incrementally as it walks the rows in order*, so each row gets the aggregate of everything *up to and including itself*. That "so far" behaviour is what turns `sum(count)` into a **running total** that grows row by row — and it's the same mechanism behind running averages, "Nth-event-so-far" numbering, and "time since this client's previous request" (`streamstats … by clientip`).
+
+**Hint:** `bin` into hourly buckets, `stats count by _time`, then `streamstats sum(count)` for the cumulative column. Order matters — `streamstats` trusts the current row order, so `sort` before it if you need a specific sequence.
 
 ### Q40 — `match()` to build a boolean flag
 Flag SQL-injection-looking requests to `www.brewertalk.com` from the scanner and count them.

@@ -396,7 +396,23 @@ index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="0
 | stats count by _time
 | streamstats sum(count) as running_total
 ```
-`streamstats` adds a cumulative column *as it walks the rows* — unlike `eventstats`, which broadcasts one global aggregate to every row. Use it for running totals and "Nth-so-far" logic.
+*(format `_time` with `strftime(_time,"%H:%M")` to read the hours.)* Verified 08/23 — `count` is per-hour, `running_total` accumulates down the rows:
+
+| _time | count | running_total |
+|---|---|---|
+| 00:00 | 793 | 793 |
+| 01:00 | 1,001 | 1,794 |
+| 02:00 | 828 | 2,622 |
+| 03:00 | 1,043 | 3,665 |
+| 04:00 | 974 | 4,639 |
+| … | … | … |
+
+**`stats` vs `eventstats` vs `streamstats` — same aggregate, different *timing*:**
+- **`stats sum(count)`** → collapses to **one** row: the grand total, individual rows gone.
+- **`eventstats sum(count)`** → keeps every row, stamps the **same** grand total on all of them (the baseline broadcast — Q33).
+- **`streamstats sum(count)`** → keeps every row, each gets the total **so far**, growing row by row — the running total above.
+
+⚠️ `streamstats` trusts the row order it's handed, so `sort` (or the `bin`+`stats` ordering) *before* it if the sequence matters. Add `by <field>` to run an independent stream per group — e.g. `streamstats count by clientip` numbers each client's requests 1, 2, 3, … separately.
 
 ### Q40 `match()` SQLi flag
 ```spl
