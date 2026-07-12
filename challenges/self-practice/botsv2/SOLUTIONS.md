@@ -472,7 +472,9 @@ Verified: **18,189** EID-1 events across the 7 `wrk-*` hosts that day (2,149–2
 
 **Step 2 — the obvious filter isn't enough.**
 ```spl
-… NOT Image="*SplunkUniversalForwarder*" | stats count
+index=botsv2 sourcetype=*ysmon* EventCode=1 host=wrk-* earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00"
+  NOT Image="*SplunkUniversalForwarder*"
+| stats count
 ```
 Verified: **4,313** events remain — cuts the pile by 76%, but that's still far too much to scroll and read. (The excluded 76% is Splunk's own Universal Forwarder re-spawning its collection helpers — `splunk-admon.exe`, `splunk-winprintmon.exe`, `splunk-powershell.exe`, … all parented by `splunkd.exe` — the same noise family as Q26.)
 
