@@ -470,7 +470,29 @@ index=botsv2 sourcetype=*ysmon* EventCode=1 host=wrk-* earliest="08/24/2017:00:0
 ```
 Verified: **18,189** EID-1 events across the 7 `wrk-*` hosts that day (2,149–2,919 each). A raw `table … | sort _time` on that many rows is exactly the "needle in the ocean" this question is built to teach you out of.
 
-**Step 2 — the obvious filter isn't enough.**
+**Step 2a — find the noise before you filter it.** Don't guess at `SplunkUniversalForwarder` — rank the field and let the data show you:
+```spl
+index=botsv2 sourcetype=*ysmon* EventCode=1 host=wrk-* earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00"
+| stats count by Image | sort - count | head 10
+```
+Verified:
+
+| Image | count |
+|---|---|
+| `C:\Program Files\SplunkUniversalForwarder\bin\splunk-powershell.exe` | 3,932 |
+| `C:\Program Files\SplunkUniversalForwarder\bin\splunk-admon.exe` | 2,126 |
+| `C:\Program Files\SplunkUniversalForwarder\bin\splunk-netmon.exe` | 2,046 |
+| `C:\Program Files\SplunkUniversalForwarder\bin\splunk-winprintmon.exe` | 1,998 |
+| `C:\Program Files\SplunkUniversalForwarder\bin\splunk-MonitorNoHandle.exe` | 1,900 |
+| `C:\Program Files\SplunkUniversalForwarder\bin\splunk-winhostinfo.exe` | 1,874 |
+| `C:\Windows\System32\conhost.exe` | 1,217 |
+| `C:\Windows\System32\cscript.exe` | 667 |
+| `C:\Program Files (x86)\Google\Chrome\Application\chrome.exe` | 512 |
+| `C:\Windows\SysWOW64\dllhost.exe` | 281 |
+
+The **top 6 rows** all share one path prefix — `C:\Program Files\SplunkUniversalForwarder\bin\…` — and together account for **13,876** of the 18,189 events (76%, matching Step 2b's drop below). That shared prefix, not a guess, is where the `NOT Image="*SplunkUniversalForwarder*"` filter comes from: on this dataset one vendor's helper binaries dominate the frequency ranking by a wide margin (3,932 vs. the next non-Splunk entry at 1,217), so "what's most common" and "what's routine background noise" line up. This is the general move, not a one-off trick — `stats count by <field> | sort - count` before you filter is how you find *any* dominant-but-benign cluster, on any sourcetype, without already knowing the environment.
+
+**Step 2b — confirm the cut.**
 ```spl
 index=botsv2 sourcetype=*ysmon* EventCode=1 host=wrk-* earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00"
   NOT Image="*SplunkUniversalForwarder*"
