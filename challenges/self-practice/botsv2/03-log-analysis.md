@@ -48,9 +48,18 @@ fields out of it*. Crucial lesson up front:
 **Find:** which host has a **failed-logon (4625) spike** — the classic credential-attack tell — versus normal successful (4624) logon volume. (Same `sourcetype=wineventlog:security`.)
 **Hint:** Filter to `EventCode=4624 OR EventCode=4625`, then `stats count by EventCode ComputerName`. One host should stand out on 4625.
 
-### Q43 — Sysmon process detail
-**Find:** on the workstations, a process that shouldn't be there — a script host, or an odd parent→child chain — by reading the actual command lines. (Sysmon `*ysmon*` carries the `CommandLine` that 4688 lacks here.)
-**Hint:** `EventCode=1` on the Sysmon sourcetype, scope to `host=wrk-*`, and `table _time host Image CommandLine ParentImage` sorted by time.
+### Q43 — Sysmon process detail: find the process that shouldn't be there
+**Find:** on the workstations, one PowerShell process hiding what it's doing — by reading Sysmon's `CommandLine` (which 4688 doesn't give you). But `EventCode=1 host=wrk-*` on 08/24 is already **thousands of events** — a raw `table … | sort _time` just dumps you into a wall of rows to scroll through by eye. The point of this question is the *narrowing* technique, not the scrolling.
+
+**Step 1 — measure before you look.** `EventCode=1 host=wrk-*`, `stats count by host`. That total is why "just read the command lines" doesn't work here.
+
+**Step 2 — the obvious first filter isn't enough either.** Most of what Sysmon logs on these hosts is Splunk's own Universal Forwarder re-spawning its collection helpers every few seconds (`Image="*SplunkUniversalForwarder*"`). Excluding it thins the pile a lot — but what's left is still too much to eyeball.
+
+**Step 3 — search for known obfuscation markers instead of scrolling.** Attackers hiding a PowerShell payload lean on a small, well-known set of tells: `-enc` (a base64-encoded script), `FromBase64String`, `DownloadString` (fileless download-and-execute). Search `CommandLine` for any of those (an `OR` of the terms) — same "known-bad marker" idea as `match()` in Q40. That alone should collapse the whole day, both hosts combined, down to single digits.
+
+**Step 4 — pivot to `ParentImage` on what's left.** What process actually launched that PowerShell? A parent you don't expect — not a shell the user opened by hand — is the real red flag. That parent is the "odd parent→child chain" this question is pointing at.
+
+⚠️ **Careful with your marker list — a bare `IEX` will backfire.** It's tempting to add `IEX` (a common Empire/fileless-download alias for `Invoke-Expression`) to the `OR` list. Don't use it unquoted/bare: `CommandLine="*IEX*"` also matches the substring inside `iexplore.exe` (Internet Explorer) and pulls in ordinary browser processes as false positives. If you want it, anchor it tighter (e.g. `"*IEX(*"` or `"*IEX (*"`) — or just leave it out; `-enc`/`FromBase64String`/`DownloadString` alone are precise enough here.
 
 ## Web & network (extracted)
 

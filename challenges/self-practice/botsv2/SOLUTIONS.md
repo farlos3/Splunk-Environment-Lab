@@ -116,6 +116,7 @@ index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="0
 | table _time clientip method uri status
 | head 10
 ```
+Verified first row: `196.52.39.2  GET  /images/smilies/sad.png  200` — a forum smiley image, part of the brewertalk.com traffic.
 
 ### Q12 — Unique URIs
 ```spl
@@ -125,6 +126,7 @@ index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="0
 | stats count by uri
 | sort - count      /* popular URIs */
 ```
+Verified 08/23: **219** unique URIs. Most popular: `/forumdisplay.php?fid=5` (390), `/` (352), `/xmlhttp.php?action=validate_captcha` (301), `/index.php` (287), `/favicon.ico` (231) — a phpBB-style forum's normal navigation pages.
 
 ### Q13 — Rarest User-Agents
 ```spl
@@ -242,6 +244,7 @@ index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="0
 | rex field=uri "[?&]id=(?<id>[^&]+)"
 | table uri section id
 ```
+Verified rows with `id` populated: `/usercp.php?action=editlists` → `section=usercp.php`, `id=1`; `/xmlhttp.php?action=edit_post&do=get_post&pid=6&id=pid_6` → `section=xmlhttp.php`, `id=pid_6`. Most rows have `section` but no `id` (only URIs with an `id=` query param get one) — a reminder that `rex` leaves the field null, not absent, when a pattern doesn't match.
 
 ### Q26 — exe from Sysmon Image
 ```spl
@@ -251,19 +254,21 @@ index=botsv2 sourcetype=*ysmon* EventCode=1 earliest="08/24/2017:00:00:00" lates
 ```
 Windows path separators are `\`, which must be escaped (`\\\\` in the SPL string → `\\` regex → literal `\`).
 
+⚠️ **Verified — the top result is Splunk's own agent, not attacker activity.** `top exe` on 08/24 is dominated by the Universal Forwarder's own helper processes: `splunk-powershell.exe` (4,497, 22%), `splunk-admon.exe` (2,457), `splunk-netmon.exe` (2,377), `splunk-winprintmon.exe` (2,283), `splunk-MonitorNoHandle.exe` (2,201), `splunk-winhostinfo.exe` (2,087) — six sourcetype-collection helpers Splunk itself spawns every few seconds. `conhost.exe` (1,217) and `cscript.exe` (791) round out the top 8. **Lesson:** a bare `top exe` on Sysmon EID 1 surfaces monitoring noise, not the interesting process — you have to filter it out (`NOT Image="*SplunkUniversalForwarder*"`) or search for a specific marker (`CommandLine="*-enc*"`, Q43) to find what actually matters.
+
 ### Q27 — sed-mode redaction
 ```spl
 index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
 | rex field=uri mode=sed "s/\?.*//"
 | stats count by uri
 ```
-Strips query strings so `/x?id=1` and `/x?id=2` collapse to `/x`.
+Strips query strings so `/x?id=1` and `/x?id=2` collapse to `/x`. Verified effect on 08/23 — **before** (raw `uri`, query strings intact) the top rows are `/forumdisplay.php?fid=5` (390), `/xmlhttp.php?action=validate_captcha` (301), `/jscripts/jquery.js?ver=1800` (195), each fragmented by its query string; **after** the `sed` strip they collapse into `/showthread.php` (830), `/forumdisplay.php` (776), `/xmlhttp.php` (525) — the same forum page hit with dozens of different `fid=`/`tid=` values now counts as one URI.
 
 ### Q28 — tstats timechart
 ```spl
 | tstats count where index=botsv2 sourcetype=suricata by _time span=1h
 ```
-Reads indexed fields → fast on 226M events; use instead of raw `| timechart` when you only need counts over time.
+Reads indexed fields → fast on 226M events; use instead of raw `| timechart` when you only need counts over time. Verified first hourly buckets (whole month, since no time filter is set): `08-01 00:00` → 831, `01:00` → 1,039, `02:00` → 897, `03:00` → 1,068, `04:00` → 1,007 — steady baseline IDS traffic before the 08-19/08-24/08-26 spikes noted in Q9.
 
 ### Q29 — metadata recon
 ```spl
@@ -271,13 +276,13 @@ Reads indexed fields → fast on 226M events; use instead of raw `| timechart` w
 | eval firstTime=strftime(firstTime,"%F %T"), lastTime=strftime(lastTime,"%F %T")
 | table sourcetype totalCount firstTime lastTime
 ```
-Same `%F %T` shorthand as Q4 — `%F` = `%Y-%m-%d`, `%T` = `%H:%M:%S` — turns `firstTime`/`lastTime`'s raw epoch numbers into readable timestamps.
+Same `%F %T` shorthand as Q4 — `%F` = `%Y-%m-%d`, `%T` = `%H:%M:%S` — turns `firstTime`/`lastTime`'s raw epoch numbers into readable timestamps. Verified, sorted by volume: `WinRegistry` (55,528,820 events), `Perfmon:Process` (49,343,467), `mysql:server:stats` (26,926,873), `mysql:transaction:details` (26,756,085), `collectd` (22,437,386) — all span the full `2017-08-01 00:00:01` → `2017-08-31 23:59:59` month, confirming the dataset's time span from Q4 down at the per-sourcetype level.
 
 ### Q30 — tstats by host+sourcetype
 ```spl
 | tstats count where index=botsv2 by host sourcetype | sort - count
 ```
-Shows which host owns which telemetry (e.g. `cassiopeia` heavy on perfmon/mysql; `wrk-*` on Sysmon/winregistry).
+Shows which host owns which telemetry (e.g. `cassiopeia` heavy on perfmon/mysql; `wrk-*` on Sysmon/winregistry). Verified top rows: `cassiopeia`/`mysql:server:stats` (26,921,724), `cassiopeia`/`mysql:transaction:details` (26,756,085), `maclory-air13`/`collectd` (20,968,547), `wrk-ghoppy`/`winregistry` (7,731,147), `wrk-btun`/`winregistry` (7,580,213) — confirms `cassiopeia` as the DB server (Q50) and shows each host's telemetry fingerprint at a glance.
 
 ### Q31 — subsearch pivot
 ```spl
@@ -289,6 +294,8 @@ index=botsv2 sourcetype=stream:dns [
 | stats count by query{}
 ```
 Subsearch resolves first, returns `host=<top>`, injected as a filter. Keep it tiny (subsearches are row/time-capped).
+
+⚠️ **Verified — this exact query returns zero results, and that's a real finding, not a broken query.** The subsearch resolves to `host=wrk-aturing` (top Sysmon host, 163,282 events — see Q10). But `stream:dns` in this lab is only captured on a handful of **servers** — `jupiter`, `cassiopeia`, `matar`, `eridanus`, `gacrux`, `altair`, `jabbah` — none of which are `wrk-*` workstations. `wrk-aturing` never appears as a `host` value in `stream:dns`, so the outer search legitimately matches nothing. Confirmed with `| tstats count where index=botsv2 sourcetype=*ysmon* by host` (all results are `venus` + `wrk-*`) vs. `index=botsv2 sourcetype=stream:dns earliest=0 | stats count by host` (all results are the server list above) — **zero host overlap** between the two sourcetypes. Lesson: a subsearch can be syntactically perfect and still return nothing because the pivot field's *value space* doesn't overlap between the two sourcetypes — check that before assuming your SPL is wrong (same "0 results ≠ broken query" principle as Q40's time-window trap).
 
 ### Q32 — stats→eval→where
 ```spl
@@ -444,22 +451,43 @@ index=botsv2 sourcetype=stream:http src_ip="45.77.65.211" earliest="08/11/2017:0
 index=botsv2 sourcetype=wineventlog:security EventCode=4688 earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00"
 | stats count by ComputerName | sort - count
 ```
-`ComputerName` carries the FQDN `<host>.frothly.local`. EventCode is auto-extracted (classic key=value log).
+`ComputerName` carries the FQDN `<host>.frothly.local`. EventCode is auto-extracted (classic key=value log). Verified top hosts: `wrk-aturing.frothly.local` (2,849), `wrk-fmaltes.frothly.local` (2,832), `wrk-btun.frothly.local` (2,779), `wrk-abungst.frothly.local` (2,645), `wrk-ghoppy.frothly.local` (2,518), `venus.frothly.local` (2,239) — process-creation volume spread fairly evenly across workstations, with `venus` (a server) also in the mix.
 
 ### Q42 Logons (4624/4625)
 ```spl
 index=botsv2 sourcetype=wineventlog:security (EventCode=4624 OR EventCode=4625) earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00"
 | stats count by EventCode ComputerName
 ```
-4625 = failed logon; a spike on one host flags a credential attack.
+4625 = failed logon; a spike on one host flags a credential attack. Verified 08/24: `mercury.frothly.local` dominates both — **14,303** successful (4624) and **577** failed (4625) logons, an order of magnitude above every other host (`wrk-abungst` next-highest on 4625 with only 24). `mercury` is a server (likely running scheduled/service auth), so read this as heavy *service-account* logon churn, not a targeted brute force — cross-check against Q48's actual SSH brute force on `gacrux` for what a real credential attack's shape looks like.
 
-### Q43 Sysmon detail
+### Q43 Sysmon detail — the narrowing funnel
+Sysmon gives the `CommandLine`/hashes that 4688 lacks here (fields via the lab add-on). The whole point is that you can't get here by eyeballing a raw table — you narrow in steps:
+
+**Step 1 — measure.**
 ```spl
 index=botsv2 sourcetype=*ysmon* EventCode=1 host=wrk-* earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00"
-| table _time host Image CommandLine ParentImage
+| stats count by host
+```
+Verified: **18,189** EID-1 events across the 7 `wrk-*` hosts that day (2,149–2,919 each). A raw `table … | sort _time` on that many rows is exactly the "needle in the ocean" this question is built to teach you out of.
+
+**Step 2 — the obvious filter isn't enough.**
+```spl
+… NOT Image="*SplunkUniversalForwarder*" | stats count
+```
+Verified: **4,313** events remain — cuts the pile by 76%, but that's still far too much to scroll and read. (The excluded 76% is Splunk's own Universal Forwarder re-spawning its collection helpers — `splunk-admon.exe`, `splunk-winprintmon.exe`, `splunk-powershell.exe`, … all parented by `splunkd.exe` — the same noise family as Q26.)
+
+**Step 3 — search for markers, not rows.**
+```spl
+index=botsv2 sourcetype=*ysmon* EventCode=1 host=wrk-* earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00"
+  (CommandLine="*-enc*" OR CommandLine="*FromBase64String*" OR CommandLine="*DownloadString*")
+| table _time host CommandLine ParentImage
 | sort _time
 ```
-Sysmon gives the `CommandLine`/hashes that 4688 lacks here (fields via the lab add-on).
+Verified: exactly **8** events, on just **2 hosts** (`wrk-btun` ×5, `wrk-klagerf` ×3) — small enough to read by hand.
+
+⚠️ A bare `CommandLine="*IEX*"` added to that `OR` list looks tempting but is a trap: it also matches the substring inside `iexplore.exe`, pulling in ordinary Internet Explorer processes as false positives (verified — it adds 2 unrelated `iexplore.exe` hits on `wrk-aturing`). Anchor it (`"*IEX(*"`) or leave it out; `-enc`/`FromBase64String`/`DownloadString` alone are already precise here.
+
+**Step 4 — read the parent.** The first hit, **`wrk-btun` at 03:29:08**, is `powershell -noP -sta -w 1 -enc …` parented by **`C:\Windows\System32\wbem\WmiPrvSE.exe`** — launched via WMI, not a user double-click (the lateral-movement tell used throughout Stage 4's Threat Hunting track). The remaining 7 rows are the follow-on chain on the same two hosts: more `-enc` PowerShell (03:32–03:56), then `schtasks.exe /Create /F /RU system …` (persistence) parented by that same PowerShell, then `taskeng.exe` re-running it. That WMI-spawned first hit is the odd parent→child chain the question is pointing at — 18,189 events narrowed to 1 signpost in four steps.
 
 ### Q44 — Web
 ```spl
@@ -467,6 +495,7 @@ index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="0
 | stats count by status method
 | sort - count
 ```
+Same query and result as Q8 (12,291 rows across `200/GET`, `200/POST`, `403/GET`, `304/GET`, `404/GET`, `302/GET` — see Q8's table and its missing-`status` gotcha). Eyeballing odd URIs: `404`s are just `/favicon.ico` (231, harmless); `403`s are almost entirely cache-busted font requests — `/fonts/icomoon/icomoon.ttf?srf3rx` (120), `.woff?srf3rx` (89), `.woff?qtatmt` (82) — a CDN/theme asset blocked by a web-server rule, not scanning. Nothing in this day's status/URI mix screams "attack"; that's expected — the interesting web activity (Q40) lives on 08/11 and 08/16, a different window entirely.
 
 ### Q45 DNS (JSON stream)
 ```spl
@@ -492,7 +521,7 @@ index=botsv2 sourcetype=pan:traffic
 | rex "TRAFFIC,\w+,\d+,[^,]+,(?<src_ip>[^,]+),(?<dest_ip>[^,]+)"
 | stats count by src_ip dest_ip
 ```
-Domain is `frothly.local`; users appear as `frothly.local\<user>` (e.g. `amber.turing`).
+Domain is `frothly.local`; users appear as `frothly.local\<user>` (e.g. `amber.turing`). Verified top pairs (whole dataset): `10.0.1.100 → 8.8.8.8` (280,239 — DNS to Google), `10.0.1.200 → 52.40.10.231` (248,555 — an AWS-hosted endpoint), `10.0.2.101 → 10.0.1.100` (181,699), `10.0.2.107 → 10.0.1.100` (51,602), `10.0.2.109 → 10.0.1.100` (47,935) — the last three are internal-to-internal flows converging on `10.0.1.100`, worth a second look given that host's role elsewhere in the dataset.
 
 ### Q48 SSH brute force (linux_secure, syslog → rex)
 ```spl
@@ -502,7 +531,12 @@ index=botsv2 sourcetype=linux_secure "Failed password" earliest=0
 **Verified top brute-forcers:** `58.242.83.20` (**26,174** fails), `116.31.116.17` (19,755), `58.242.83.11` (19,329), `218.65.30.126`, `116.31.116.52` — internet SSH brute force (mostly hitting `gacrux`). Classic external noise; note it and distinguish from any *successful* logon.
 
 ### Q49 — auditd / osquery
-`sourcetype=osquery_results` is JSON → use `spath`; `sourcetype=auditd` is `key=value`-ish → inspect `_raw` then `rex`. Deliverable = knowing which parser fits.
+`sourcetype=osquery_results` is JSON → use `spath`; `sourcetype=auditd` is `key=value`-ish → inspect `_raw` then `rex`. Deliverable = knowing which parser fits. Verified raw samples:
+```
+auditd:          type=USER_AUTH msg=audit(08/31/2017 22:59:50.870:756395) : user pid=32288 uid=root auid=unset ses=unset subj=system_u:system_r:sshd_t:s0-s0:c0.c1023 msg='op=password acct=(unknown) exe=/usr/sbin/sshd hostname=? addr=58.56.184.242 terminal=ssh res=failed'
+osquery_results:  {"name":"pack_incident-response_listening_ports","hostIdentifier":"MACLORY-AIR13S.local","calendarTime":"Thu Aug 31 22:55:48 2017 UTC","unixTime":"1504220148","decorations":{"host_uuid":"564D4B96-D1CC…
+```
+`auditd` confirms itself as space-separated `key=value` pairs (with an embedded quoted `msg='...'` sub-message) — `rex` territory, e.g. this line is the *same* SSH brute-force noise as Q48, just from Linux's audit subsystem instead of `linux_secure`. `osquery_results` confirms itself as one JSON object per line — `spath` territory; note the JSON is nested (`decorations.host_uuid`), so `spath` gives you dotted field names like `decorations.host_uuid`, not flat ones.
 
 ### Q50 MySQL
 ```spl
@@ -519,6 +553,7 @@ index=botsv2 host=wrk-bgist (sourcetype=*ysmon* OR sourcetype=wineventlog:securi
 | sort _time
 | table _time sourcetype EventCode Image query{}
 ```
+Verified 08/24 09:22:07 — `wrk-bgist` fires a tight cluster within the same second: `WinEventLog:Security` EventCode `4688` (×2), then `XmlWinEventLog:…Sysmon…` EventCode `5` (process-terminate) and `1` (process-create) for `C:\Windows\System32\conhost.exe`, followed by a `schtasks.exe` process-create — a console-host + scheduled-task-tool sequence worth reading top-to-bottom in the actual table. **Zero `stream:dns` rows appear** for this host in this window — consistent with Q31's finding that `stream:dns` is only captured on server hosts (`jupiter`, `cassiopeia`, `matar`, …), not on `wrk-*` workstations. That's a real gap in this host's telemetry, not a query bug: correlating a workstation across "all three" sourcetypes in practice means two (Sysmon + WinEventLog), with DNS visibility coming only from whichever server resolved the request on its behalf.
 
 ### Q53 Asset picture
 ```spl
