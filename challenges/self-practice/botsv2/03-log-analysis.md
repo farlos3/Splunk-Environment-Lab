@@ -49,17 +49,28 @@ fields out of it*. Crucial lesson up front:
 **Hint:** Filter to `EventCode=4624 OR EventCode=4625`, then `stats count by EventCode ComputerName`. One host should stand out on 4625.
 
 ### Q43 — Sysmon process detail: find the process that shouldn't be there
-**Find:** on the workstations, one PowerShell process hiding what it's doing — by reading Sysmon's `CommandLine` (which 4688 doesn't give you). But `EventCode=1 host=wrk-*` on 08/24 is already **thousands of events** — a raw `table … | sort _time` just dumps you into a wall of rows to scroll through by eye. The point of this question is the *narrowing* technique, not the scrolling.
+**Find:** one PowerShell process on the workstations that's hiding what it's doing. Sysmon's `CommandLine` shows it (4688 doesn't). But `EventCode=1 host=wrk-*` on 08/24 is already **thousands of events** — you can't just `table` it and scroll. This question is about the *narrowing* technique, not the scrolling.
 
-**Step 1 — measure before you look.** `EventCode=1 host=wrk-*`, `stats count by host`. That total is why "just read the command lines" doesn't work here.
+**Step 1 — measure first.**
+`EventCode=1 host=wrk-*` → `stats count by host`. The total is why "just read the command lines" doesn't work.
 
-**Step 2 — don't guess what's noise; let the data rank it for you.** You don't already know `SplunkUniversalForwarder` is the thing to exclude — you find it the same way `top`/Q1/Q29 find anything: profile the field before you filter it. Run `stats count by Image | sort - count | head 10` on the same 18,189 rows. Whatever sits at the top *is* the noise, almost by definition — real attacker activity is rare, so a process name overwhelming the count is a sign it's routine background activity, not a targeted action. Here the top 6 rows all share one path prefix (`C:\Program Files\SplunkUniversalForwarder\bin\…`) — that shared prefix is what you turn into the exclusion (`NOT Image="*SplunkUniversalForwarder*"`), not a guess. This "rank first, whitelist what dominates" move is the general technique — on a different host/dataset the noisy vendor path will be different, but the *method* (profile → spot the dominant, legitimate cluster → exclude it) is the same. Excluding it here thins the pile a lot — but what's left is still too much to eyeball.
+**Step 2 — find the noise; don't guess it.**
+- Run `stats count by Image | sort - count | head 10` on those same rows.
+- Whatever sits at the top is almost always noise — real attacker activity is rare, so a process name that dominates the count is routine background activity, not a targeted action.
+- Here the top 6 rows all share one path: `C:\Program Files\SplunkUniversalForwarder\bin\…`. That shared prefix *is* your exclusion filter: `NOT Image="*SplunkUniversalForwarder*"`.
+- The move — *rank the field, exclude what dominates* — works on any dataset, even one you've never seen before; only the noisy vendor path changes.
+- It thins the pile a lot, but what's left is still too much to eyeball.
 
-**Step 3 — search for known obfuscation markers instead of scrolling.** Attackers hiding a PowerShell payload lean on a small, well-known set of tells: `-enc` (a base64-encoded script), `FromBase64String`, `DownloadString` (fileless download-and-execute). Search `CommandLine` for any of those (an `OR` of the terms) — same "known-bad marker" idea as `match()` in Q40. That alone should collapse the whole day, both hosts combined, down to single digits.
+**Step 3 — search for markers, not rows.**
+- Attackers hiding a PowerShell payload lean on a few well-known tells: `-enc` (base64-encoded script), `FromBase64String`, `DownloadString` (fileless download-and-execute).
+- Search `CommandLine` for any of those (`OR` them together) — same "known-bad marker" idea as `match()` in Q40.
+- That alone should collapse the whole day, both hosts combined, down to single digits.
 
-**Step 4 — pivot to `ParentImage` on what's left.** What process actually launched that PowerShell? A parent you don't expect — not a shell the user opened by hand — is the real red flag. That parent is the "odd parent→child chain" this question is pointing at.
+**Step 4 — read the parent.**
+- What actually launched that PowerShell? Check `ParentImage`.
+- A parent you don't expect — not a shell the user opened by hand — is the real red flag. That's the "odd parent→child chain" this question is pointing at.
 
-⚠️ **Careful with your marker list — a bare `IEX` will backfire.** It's tempting to add `IEX` (a common Empire/fileless-download alias for `Invoke-Expression`) to the `OR` list. Don't use it unquoted/bare: `CommandLine="*IEX*"` also matches the substring inside `iexplore.exe` (Internet Explorer) and pulls in ordinary browser processes as false positives. If you want it, anchor it tighter (e.g. `"*IEX(*"` or `"*IEX (*"`) — or just leave it out; `-enc`/`FromBase64String`/`DownloadString` alone are precise enough here.
+⚠️ **Watch out for a bare `IEX`.** It's tempting to add `IEX` (short for `Invoke-Expression`, a common Empire alias) to your marker list. Don't — `CommandLine="*IEX*"` also matches the substring inside `iexplore.exe` (Internet Explorer) and pulls in ordinary browser processes as false positives. Anchor it tighter (`"*IEX(*"`) or just skip it; `-enc`/`FromBase64String`/`DownloadString` alone are precise enough here.
 
 ## Web & network (extracted)
 
