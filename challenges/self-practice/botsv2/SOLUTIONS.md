@@ -513,6 +513,30 @@ Verified: exactly **8** events, on just **2 hosts** (`wrk-btun` ×5, `wrk-klager
 
 **Step 4 — read the parent.** The first hit, **`wrk-btun` at 03:29:08**, is `powershell -noP -sta -w 1 -enc …` parented by **`C:\Windows\System32\wbem\WmiPrvSE.exe`** — launched via WMI, not a user double-click (the lateral-movement tell used throughout Stage 4's Threat Hunting track). The remaining 7 rows are the follow-on chain on the same two hosts: more `-enc` PowerShell (03:32–03:56), then `schtasks.exe /Create /F /RU system …` (persistence) parented by that same PowerShell, then `taskeng.exe` re-running it. That WMI-spawned first hit is the odd parent→child chain the question is pointing at — 18,189 events narrowed to 1 signpost in four steps.
 
+### Windows endpoint — case summary (Q41–Q43)
+
+Three sources looked at the same day. Only the third one actually finds the compromise:
+
+| Q | Source | What it showed | Verdict |
+|---|---|---|---|
+| Q41 | 4688 (process creation) | Volume spread evenly across every `wrk-*` host (2,149–2,919 each) | No standout — volume alone flags nothing |
+| Q42 | 4624/4625 (logon) | `mercury.frothly.local` spikes to 14,303/577 — the "obvious" anomaly | ⚠️ **Red herring** — a server's routine service-account churn, not a credential attack |
+| Q43 | Sysmon EID 1 (process detail) | Rank-and-exclude the noise, then filter on obfuscation markers | ✅ **The real finding** — a PowerShell Empire stager |
+
+Q43's funnel resolves to a concrete, verified timeline on 08/24:
+
+| Time | Host | Event |
+|---|---|---|
+| 03:29:08 | `wrk-btun` | `powershell -enc …` parented by `WmiPrvSE.exe` — the **initial WMI-launched stager** (foothold) |
+| 03:32:00–01 | `wrk-btun` | Second `-enc` PowerShell invocation |
+| 03:45:03 | `wrk-btun` | `schtasks /Create /F /RU system …` — **persistence** established |
+| 03:55:13 | `wrk-klagerf` | Same WMI-spawned stager pattern on a **second host** — lateral movement, 26 min after the foothold |
+| 03:56:00 | `wrk-btun` | `taskeng.exe` re-runs the scheduled task |
+| 04:04:26 | `wrk-klagerf` | Same `schtasks` persistence, second host |
+| 04:09:00 | `wrk-klagerf` | `taskeng.exe` re-runs it there too |
+
+**Lesson:** the two "obvious" places to check — process-creation volume (Q41) and logon spikes (Q42) — come up empty or misleading; the actual compromise is invisible to both. It only surfaces in Q43 once you stop looking at *volume* and filter on *known markers* instead. `wrk-btun` is the foothold (03:29); it spreads to `wrk-klagerf` by the same WMI technique inside 26 minutes, and both hosts have working persistence by ~04:09 — a ~40-minute window from initial access to a second persistent foothold. This is a preview of Stage 4's Threat Hunting track ([`../../specialized/botsv2/01-threat-hunting.md`](../../specialized/botsv2/01-threat-hunting.md)), which follows this same C2 to a third host (`venus`) and names the accounts behind it (`billy.tun` foothold → `service3` lateral movement).
+
 ### Q44 — Web
 ```spl
 index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
