@@ -13,31 +13,8 @@ Splunk's SOC training competitions. Pick any combination of **v1**,
 detections, and validate dashboards against data that looks like a
 real incident.
 
-```
-┌────────────────────────────────────────────────────────────────────┐
-│                    Splunk container (splunk-lab)                   │
-│                                                                    │
-│   /opt/splunk/etc/apps/botsv1_data_set/  ← splunklab_splunk-botsv1 │
-│   /opt/splunk/etc/apps/botsv2_data_set/  ← splunklab_splunk-botsv2 │
-│   /opt/splunk/etc/apps/botsv3_data_set/  ← splunklab_splunk-botsv3 │
-│                                                                    │
-│   /opt/splunk/var                        ← splunklab_splunk-var    │
-│   /opt/splunk/etc/users                  ← splunklab_splunk-etc-…  │
-└────────────────────────────────────────────────────────────────────┘
-       Web UI :8000   HEC :8088   Mgmt :8089   Fwd :9997   Syslog :1514
-
-   bots-data/botsv1/ (host staging) ─one-time copy─▶ splunk-botsv1 volume
-   bots-data/botsv2/                                 splunk-botsv2 volume
-   bots-data/botsv3/                                 splunk-botsv3 volume
-```
-
-> **Why a volume, not a bind mount?**  Docker Desktop on Windows exposes
-> host files via gRPC-FUSE, which lacks the file-locking and mmap
-> semantics Splunk's `validatedb` requires. Splunk refuses to use such
-> paths as an index home ("unusable filesystem"). So we stage each
-> dataset in `bots-data/bots<vN>/` on the host, then copy it into a
-> named volume that lives on Docker's native ext4 — Splunk is happy
-> with that.
+Container/volume layout and why BOTS data goes through a staging copy
+instead of a bind mount: **[docker/ARCHITECTURE.md](docker/ARCHITECTURE.md)**.
 
 ## Quick start
 
@@ -240,13 +217,3 @@ Splunk is reading from the named volumes, not from these folders. You
 can delete their contents (or just the `.tgz` files) to reclaim disk,
 at the cost of having to re-download/re-extract before the next
 `./setup.sh --force` or `./docker/reset.sh --full`.
-
-## Ports exposed
-
-| Port | Service | Notes |
-|---|---|---|
-| 8000 | Splunk Web | http://localhost:8000 |
-| 8088 | HTTP Event Collector | token env var: `SPLUNK_HEC_TOKEN` |
-| 8089 | Splunk REST / Management | for CLI / API |
-| 9997 | Forwarder receiver | for a future Universal Forwarder |
-| 1514/tcp+udp | Syslog | non-privileged (container can't bind 514) |
