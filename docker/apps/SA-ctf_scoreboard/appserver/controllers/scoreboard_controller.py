@@ -35,10 +35,15 @@ from xml.dom import minidom
 sys.path.append(make_splunkhome_path(['etc', 'apps', 'SA-ctf_scoreboard', 'bin']))
 import validatectf
 
-bin_dir = os.path.join(util.get_apps_dir(), __file__.split('.')[-2], 'bin')
-
-if not bin_dir in sys.path:
-    sys.path.append(dir)
+# (Removed a second, redundant bin_dir computation that used __file__ --
+# Splunk's custom-controller loader exec()s this file in a namespace that
+# doesn't define __file__ at all, so referencing it here crashed the whole
+# module load with NameError before any route could be registered, which
+# surfaced as a plain 404 on every /custom/SA-ctf_scoreboard/... endpoint.
+# It was also dead code even when it didn't crash: the sys.path entry it
+# computed duplicates the one added above, and its `sys.path.append(dir)`
+# appended the builtin `dir` function instead of the `bin_dir` variable it
+# clearly meant to -- a pre-existing typo.)
 
 def setup_logger(level, filename):
     '''

@@ -584,6 +584,19 @@ provision_ctf_data() {
     import_kv_collection "SA-ctf_scoreboard" "ctf_questions" "$seed_dir/ctf_questions.csv"
     import_kv_collection "SA-ctf_scoreboard_admin" "ctf_answers" "$seed_dir/ctf_answers.csv"
     import_kv_collection "SA-ctf_scoreboard_admin" "ctf_hints" "$seed_dir/ctf_hints.csv"
+
+    # Global (not per-version) user/team roster — the welcome/questions
+    # pages' get_user_info macro does `lookup ctf_users Username as user`,
+    # so without this the Team/DisplayUsername/Teammates panels render
+    # blank or literally show unresolved $token$ text.
+    import_kv_collection "SA-ctf_scoreboard" "ctf_users" "$CTF_SEED_BASE/ctf_users.csv"
+
+    # Also global: submit_question() in scoreboard_controller.py hard-blocks
+    # every answer submission (redirects to user_agreement_required) unless
+    # the submitting user has a row in ctf_eulas_accepted — without a seeded
+    # ctf_eulas + acceptance record, nobody can ever answer a single question.
+    import_kv_collection "SA-ctf_scoreboard" "ctf_eulas" "$CTF_SEED_BASE/ctf_eulas.csv"
+    import_kv_collection "SA-ctf_scoreboard" "ctf_eulas_accepted" "$CTF_SEED_BASE/ctf_eulas_accepted.csv"
 }
 
 # ---------------------------------------------------------------------------

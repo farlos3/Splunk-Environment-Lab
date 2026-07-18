@@ -62,21 +62,24 @@
       <table>
         <search>
           <query>
-          | inputlookup ctf_users 
-          | search 
-            [ search 
-              | eval user="$env:user$" `get_user_info` 
-              | fields Team] 
-              | eval RealPlusSplunk=DisplayUsername . " (" . Username . ")" 
-              | stats values(RealPlusSplunk) as TeamMates 
+          | inputlookup ctf_users
+          | search
+            [ | makeresults
+              | eval user="$env:user$" `get_user_info`
+              | fields Team]
+              | eval RealPlusSplunk=DisplayUsername . " (" . Username . ")"
+              | stats values(RealPlusSplunk) as TeamMates
               | eval TeamMates=mvjoin(TeamMates, ", ")
+              | fillnull value="None" TeamMates
           </query>
           <earliest>0</earliest>
           <finalized>
             <condition match=" 'job.resultCount' = 1">
               <set token="ctf_teammates">$result.TeamMates$</set>
             </condition>
-            <condition></condition>
+            <condition>
+              <set token="ctf_teammates">None</set>
+            </condition>
           </finalized>
         </search>
       </table>

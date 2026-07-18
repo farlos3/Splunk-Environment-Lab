@@ -1,14 +1,20 @@
+// bootstrap.popover / bootstrap.tooltip (AMD modules for Bootstrap 2.3.1's
+// contrib plugins) no longer ship in Splunk 10.4's static assets -- the
+// require() below used to 404 on them, get served Splunk's HTML error page
+// back, and RequireJS would refuse to execute that (MIME type mismatch),
+// throwing before this callback ever ran. That's why every token on this
+// page stayed literally as $unresolved_token$ text no matter what the
+// searches themselves returned. The two calls that used to be
+// data-toggle=popover/tooltip on the buttons below just lose their hover
+// tooltips now, which is fine -- see the title="..." attributes already on
+// those buttons for the same text plainly, no JS needed.
 require(["underscore",
          "jquery",
          "splunkjs/mvc",
          "splunkjs/mvc/utils",
          "splunkjs/mvc/searchmanager",
-         "bootstrap.popover",
-         "bootstrap.tooltip",
          "splunkjs/mvc/simplexml/ready!"], function(_, $, mvc, utils, SearchManager){
 
-  $("[data-toggle=popover]").popover();
-  $("[data-toggle=tooltip]").tooltip();
   var tokens = mvc.Components.get("default");
   var user=Splunk.util.getConfigValue("USERNAME");
 
@@ -35,12 +41,16 @@ require(["underscore",
    sm.on('search:done', function(properties) {
         var searchName = properties.content.request.label
         if (properties.content.resultCount == 0) {
+            // No row -- the ctf_stealth lookup filter (StealthModeTeam=*)
+            // drops the whole result when nobody on the team has ever
+            // enabled stealth mode, which is every fresh install/seed.
+            tokens.set("ctf_stealth_mode", "Disabled");
         } else {
             var results = splunkjs.mvc.Components.getInstance(searchName).data('results', { output_mode: 'json', count: 0 });
             results.on("data", function(properties) {
                 var searchName = properties.attributes.manager.id
                 var data = properties.data().results
-                tokens.set("ctf_stealth_mode", data[0]['StealthMode']);
+                tokens.set("ctf_stealth_mode", (data[0] && data[0]['StealthMode']) || "Disabled");
             });
         };
     });
