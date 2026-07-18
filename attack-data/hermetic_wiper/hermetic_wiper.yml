@@ -1,0 +1,11 @@
+author: Teoderick Contreras
+id: 7f55b95a-9642-11ec-ba7c-acde48001122
+date: '2022-02-25'
+description: Generated datasets for hermetic wiper in attack range.
+environment: attack_range
+directory: hermetic_wiper
+datasets:
+- name: sysmon
+  path: /datasets/malware/hermetic_wiper/sysmon.log
+  sourcetype: XmlWinEventLog
+  source: XmlWinEventLog:Microsoft-Windows-Sysmon/Operational

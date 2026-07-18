@@ -41,15 +41,7 @@ real incident.
 
 ## Quick start
 
-```powershell
-# Windows
-.\setup.ps1                  # default: BOTSv1 only
-.\setup.ps1 -V1 -V2          # BOTSv1 + BOTSv2
-.\setup.ps1 -All             # v1 + v2 + v3
-```
-
 ```bash
-# Linux / macOS
 ./setup.sh                   # interactive: prompts for v1 / v2 / v3 / all
 ./setup.sh --v1 --v2         # BOTSv1 + BOTSv2 (flags skip the prompt)
 ./setup.sh --all             # v1 + v2 + v3
@@ -87,12 +79,6 @@ For BOTSv1 you should see ~33 million events across
 
 ### Setup script options
 
-```powershell
-.\setup.ps1 -V2 -UrlV2 https://custom.example/botsv2.tgz   # override URL
-.\setup.ps1 -V1 -SkipDownload                              # fail if .tgz not local
-.\setup.ps1 -V1 -Force                                     # re-extract AND re-populate volume
-```
-
 ```bash
 ./setup.sh --v2 --url-v2 https://custom.example/botsv2.tgz
 ./setup.sh --v1 --skip-download
@@ -107,8 +93,7 @@ reports a URL is dead:
 1. Open <https://github.com/splunk/botsv1> (or `botsv2` / `botsv3`)
 2. Follow the current Download section
 3. Drop the `.tgz` into `bots-data/bots<vN>/`
-4. Re-run `setup` with `--<vN> --skip-download` (bash) or
-   `-<VN> -SkipDownload` (PowerShell)
+4. Re-run `./setup.sh --<vN> --skip-download`
 
 ## Resetting
 
@@ -117,9 +102,9 @@ it converts to Splunk Free (500 MB/day, no auth, fewer features). BOTS
 data is pre-indexed so it keeps working under Free, but to refresh the
 trial:
 
-```powershell
-.\docker\reset.ps1            # fast — wipes container + state, keeps BOTS volumes
-.\docker\reset.ps1 -Full      # nuke everything; next setup re-populates
+```bash
+./docker/reset.sh             # fast — wipes container + state, keeps BOTS volumes
+./docker/reset.sh --full      # nuke everything; next setup re-populates
 ```
 
 Fast reset (default) wipes `splunk-var` (trial state, _internal logs)
@@ -168,39 +153,84 @@ index=botsv1 sourcetype=WinEventLog:Security EventCode=4625 earliest=0
 index=botsv1 sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational"
 EventCode=1 earliest=0
 | stats count by Image | sort -count | head 20
-
-# 4. Firewall traffic — top external destinations by bytes out
-index=botsv1 sourcetype=fgt_traffic earliest=0
-| stats sum(sentbyte) AS bytes_out by dstip | sort -bytes_out | head 20
-
-# 5. SQL injection probes in IIS logs
-index=botsv1 sourcetype=iis ("UNION SELECT" OR "OR 1=1" OR "DROP TABLE") earliest=0
-| table _time, c_ip, cs_uri_stem, cs_uri_query
-
-# 6. PowerShell encoded commands (commonly malicious)
-index=botsv1 sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational"
-"powershell" CommandLine="*-enc*" earliest=0
-| table _time, Computer, User, CommandLine
 ```
 
 For full walkthroughs of the BOTSv1 scenario (60 official questions +
 answer keys), search "BOTSv1 walkthrough" — the community has many
 write-ups on Medium and GitHub.
 
+## CTF scoreboard (optional)
+
+A real jeopardy-style scoreboard UI — question list, answer submission,
+scoring, hints — on top of the BOTS data, using Splunk's own
+[`SA-ctf_scoreboard`](https://github.com/splunk/SA-ctf_scoreboard)
+(original author: Dave Herrald) +
+[`SA-ctf_scoreboard_admin`](https://github.com/splunk/SA-ctf_scoreboard_admin)
+apps — the same apps Splunk used internally to run early BOTS
+competitions (deprecated by Splunk as of January 2022, still functional
+here). Installed automatically by `setup.sh`:
+
+```bash
+./setup.sh --v1                              # BOTSv1 data + v1 writeup questions (default)
+./setup.sh --v2 --ctf-questions v2            # explicit
+./setup.sh --v1 --ctf-questions v1-official   # load your own official set instead
+```
+
+Then open <http://localhost:8000/en-US/app/SA-ctf_scoreboard/welcome>
+(`admin` / `p@ssw0rd`). Questions come from
+`docker/ctf_seed_data/<vN>_writeups/`, derived from the
+`challenges/splunk-bots/` walkthroughs below — only one question set can
+be "live" at a time (see why, plus full setup/config detail,
+troubleshooting, and the compatibility patch this lab needed, in
+**[docker/CTF_SCOREBOARD.md](docker/CTF_SCOREBOARD.md)**).
+
+## Attack data micro-CTF (optional, opt-in)
+
+A second, independent practice pack — 34 original deep-dive questions
+covering Malware Analysis + Log Analysis, one per malware family, built
+from real endpoint telemetry in
+[splunk/attack_data](https://github.com/splunk/attack_data) (the same
+dataset Splunk uses to test its own ESCU detections). Unlike the CTF
+scoreboard above or the BOTS challenges, there's no existing answer key
+to import here — every question was written by actually searching the
+raw Sysmon/Windows Event Log data for a verifiable artifact and
+confirming the answer with real SPL. Standalone from `SA-ctf_scoreboard`
+— no scored UI, just a markdown Q&A pack (same convention as
+`challenges/splunk-bots/`) plus a dedicated Splunk index.
+
+```bash
+./setup.sh --v1 --attackdata   # any --vN works; --attackdata is independent of BOTS version
+```
+
+Downloads ~330 MB of per-family log samples (one small scenario per
+family) and ingests them into a new `attack_data` index via
+`splunk add oneshot`. See
+**[challenges/attack-data-ctf/README.md](challenges/attack-data-ctf/README.md)**
+for how to use the pack, and
+**[docker/apps/attack_data_ingest/](docker/apps/attack_data_ingest/)**
+for the index/field-extraction config. Requires python3 (same as the CTF
+scoreboard's KV import, for downloading + parsing the file manifest).
+
 ## Folder layout
 
 ```
 Splunk-Environment-Lab/
-├── setup.ps1 / setup.sh        ← one-shot bootstrap (download + extract + copy + up)
+├── setup.sh                    ← one-shot bootstrap (download + extract + copy + up)
 ├── docker/
 │   ├── docker-compose.yml      ← splunk service + named volumes + ports
-│   └── reset.ps1 / reset.sh    ← nuke + restart; -Full also wipes BOTS volumes
+│   ├── reset.sh                ← nuke + restart; --full also wipes BOTS volumes
+│   ├── CTF_SCOREBOARD.md       ← CTF scoreboard setup/config detail, troubleshooting
+│   ├── apps/                   ← bind-mounted Splunk apps (sysmon extractions, CTF scoreboard, attack_data_ingest)
+│   ├── ctf_seed_data/          ← question/answer/hint CSVs, per BOTS version
+│   └── download_attack_data.py ← fetches attack-data/*/*.log from splunk/attack_data (Git LFS via CDN)
 ├── bots-data/                  ← staging area (gitignored — per-version dirs tracked)
 │   ├── botsv1/                 ← BOTSv1 archive + extracted app
 │   ├── botsv2/                 ← BOTSv2 archive + extracted app
 │   └── botsv3/                 ← BOTSv3 archive + extracted app
+├── attack-data/                ← staging area for the attack-data micro-CTF (gitignored *.log, manifest.json tracked)
 ├── challenges/                 ← bundled practice walkthroughs
-│   └── splunk-bots/            ← vendored from github.com/chan2git/splunk-bots
+│   ├── splunk-bots/            ← vendored from github.com/chan2git/splunk-bots
+│   └── attack-data-ctf/        ← original Q&A pack for the attack-data micro-CTF
 ├── .gitignore                  ← blocks all huge files
 └── README.md
 ```
@@ -209,7 +239,7 @@ After a successful first run, `bots-data/bots<vN>/` is a backup —
 Splunk is reading from the named volumes, not from these folders. You
 can delete their contents (or just the `.tgz` files) to reclaim disk,
 at the cost of having to re-download/re-extract before the next
-`setup -Force` or `reset -Full`.
+`./setup.sh --force` or `./docker/reset.sh --full`.
 
 ## Ports exposed
 

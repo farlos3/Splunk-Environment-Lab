@@ -16,6 +16,8 @@
 #   4. docker compose up -d
 #   5. wait for the container to become healthy
 #   6. verify each selected app + index is visible to Splunk
+#   7. provision the CTF scoreboard (config file + KV store questions/answers/hints)
+#   8. (opt-in, --attackdata) download + ingest the attack_data micro-CTF logs
 #
 # Usage:
 #   ./setup.sh                          # interactive: prompts for v1/v2/v3/all
@@ -24,11 +26,49 @@
 #   ./setup.sh --all                    # v1, v2, v3
 #   ./setup.sh --v2 --skip-download     # use the .tgz already in bots-data/botsv2/
 #   ./setup.sh --v1 --force             # re-extract AND re-populate v1 volume
+#                                       # (also re-imports CTF KV data)
 #   ./setup.sh --v1 --url-v1 https://custom.example/botsv1.tgz
+#   ./setup.sh --v2 --ctf-questions v2-official   # load docker/ctf_seed_data/v2_official/
+#                                                  # instead of the default v2_writeups set
+#   ./setup.sh --v1 --ctf-questions none           # install the scoreboard apps but
+#                                                   # don't touch KV store data
 #
 # Practice challenges under challenges/splunk-bots/ are vendored from
 # https://github.com/chan2git/splunk-bots — refer to that upstream for
 # the original walkthroughs.
+#
+# CTF scoreboard: splunk/SA-ctf_scoreboard + splunk/SA-ctf_scoreboard_admin,
+# vendored under docker/apps/ (trimmed of unused cloudconnectlib/solnlib vendor
+# trees that hit Windows MAX_PATH during checkout — neither is imported by the
+# web controller). The controller hardcodes its own app names in KV store REST
+# paths, so only ONE question/answer set can be loaded at a time (it's a single
+# shared 'SA-ctf_scoreboard' KV store, not one per BOTS version).
+#
+# Question/answer/hint CSVs live in docker/ctf_seed_data/<vN>_<source>/, split
+# per BOTS version because the walkthroughs (and the real datasets/indexes)
+# are themselves per-version — a v2 question about Cerber ransomware makes no
+# sense if only the v1 index is loaded. <source> is 'writeups' (derived from
+# https://github.com/chan2git/splunk-bots; BasePoints inferred from the
+# question-number hundreds digit, NOT real competition scoring) or 'official'
+# (empty placeholder — see the README in each docker/ctf_seed_data/<vN>_official/).
+# --ctf-questions picks the set explicitly; left unset, it defaults to
+# '<vN>-writeups' for whichever single BOTS version was selected via
+# --v1/--v2/--v3 (ambiguous with multiple/no versions selected -> falls back
+# to v1-writeups with a note).
+#
+# The service account the scoreboard uses to fetch answers is just the Splunk
+# 'admin' user (see scoreboard_controller.config.example) — fine for a
+# single-player lab; a real multi-team event should follow the upstream
+# README's svcaccount/ctf_answers_service role instructions instead.
+#
+# Attack data micro-CTF (--attackdata, opt-in — ~330 MB download): one small
+# scenario per malware family from https://github.com/splunk/attack_data,
+# ingested into a new 'attack_data' index. Independent of the CTF scoreboard
+# above — no scored UI, just real log data plus a question/answer pack at
+# challenges/attack-data-ctf/ (questions.md prose-only, full SPL + verified
+# answers in SOLUTIONS.md, same convention as challenges/splunk-bots/). See
+# attack-data/README.md and the root README's "Attack data micro-CTF"
+# section for details. Needs python3 (downloads + manifest parsing).
 
 set -euo pipefail
 
@@ -63,6 +103,8 @@ FORCE=0
 SEL_V1=0
 SEL_V2=0
 SEL_V3=0
+CTF_MODE=""   # v1|v2|v3|v1-official|v2-official|v3-official|none, empty = auto
+ATTACKDATA=0  # --attackdata: opt-in ~330MB malware-log micro-CTF ingest
 
 is_selected() {
     case "$1" in
@@ -96,6 +138,13 @@ while [ $# -gt 0 ]; do
         --url-v3) URL_V3="$2"; shift 2 ;;
         --skip-download) SKIP_DOWNLOAD=1; shift ;;
         --force) FORCE=1; shift ;;
+        --ctf-questions)
+            case "$2" in
+                v1|v2|v3|v1-official|v2-official|v3-official|none) CTF_MODE="$2" ;;
+                *) echo "Unknown --ctf-questions value: $2 (expected v1|v2|v3|v1-official|v2-official|v3-official|none)"; exit 1 ;;
+            esac
+            shift 2 ;;
+        --attackdata) ATTACKDATA=1; shift ;;
         -h|--help)
             sed -n '2,30p' "$0"; exit 0 ;;
         *) echo "Unknown argument: $1"; exit 1 ;;
@@ -134,6 +183,26 @@ if ! any_selected; then
     fi
 fi
 
+# Resolve --ctf-questions default now that BOTS dataset selection is final:
+# match whichever single version was selected, else fall back to v1.
+if [ -z "$CTF_MODE" ]; then
+    _n_sel=0
+    [ "$SEL_V1" -eq 1 ] && _n_sel=$((_n_sel + 1))
+    [ "$SEL_V2" -eq 1 ] && _n_sel=$((_n_sel + 1))
+    [ "$SEL_V3" -eq 1 ] && _n_sel=$((_n_sel + 1))
+    if [ "$_n_sel" -eq 1 ]; then
+        case "$(selected_list)" in
+            v1) CTF_MODE="v1" ;;
+            v2) CTF_MODE="v2" ;;
+            v3) CTF_MODE="v3" ;;
+        esac
+    else
+        CTF_MODE="v1"
+        echo "NOTE: multiple/no BOTS datasets selected — defaulting --ctf-questions to v1" \
+            "(override with --ctf-questions v2|v3|... if that's not what you want)"
+    fi
+fi
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="$REPO_ROOT/docker/docker-compose.yml"
 BOTS_BASE="$REPO_ROOT/bots-data"
@@ -169,6 +238,12 @@ to_winpath() {
     esac
 }
 
+# Same D:\d\foo mangling bug bites native python3.exe (MSYS2_ARG_CONV_EXCL='*'
+# stops MSYS converting /d/foo -> D:\foo for it, same as for docker/curl) —
+# use this wherever $REPO_ROOT crosses into a python3 argv or an embedded
+# python string literal.
+REPO_ROOT_WIN="$(to_winpath "$REPO_ROOT")"
+
 # Resolve per-version metadata. Sets these globals: V_URL, V_SIZE,
 # V_DIR, V_VOLUME, V_APP, V_INDEX.
 load_version() {
@@ -196,6 +271,17 @@ for cmd in docker tar curl awk; do
     fi
 done
 info "docker, tar, curl, awk available"
+
+HAVE_PYTHON3=1
+if ! command -v python3 >/dev/null 2>&1; then
+    HAVE_PYTHON3=0
+    if [ "$CTF_MODE" != "none" ]; then
+        echo "WARNING: 'python3' not found on PATH — CTF scoreboard apps will be" >&2
+        echo "         installed but question/answer/hint KV data will NOT be" >&2
+        echo "         imported. Install python3 and re-run, or pass --ctf-questions none" >&2
+        echo "         to silence this warning." >&2
+    fi
+fi
 
 # `docker info` is the cheapest call that actually talks to the daemon.
 # A bare `docker --version` only checks the CLI binary and would not
@@ -368,6 +454,205 @@ populate_volume() {
     info "volume populated"
 }
 
+# ---------------------------------------------------------------------------
+# CTF scoreboard provisioning
+# ---------------------------------------------------------------------------
+CTF_CONTROLLER_CONFIG="$REPO_ROOT/docker/apps/SA-ctf_scoreboard/appserver/controllers/scoreboard_controller.config"
+CTF_CONTROLLER_EXAMPLE="$REPO_ROOT/docker/apps/SA-ctf_scoreboard/appserver/controllers/scoreboard_controller.config.example"
+CTF_SEED_BASE="$REPO_ROOT/docker/ctf_seed_data"
+
+# scoreboard_controller.py reads this file directly off disk (it's not a
+# layered Splunk .conf) and hardcodes the app names in its KV store REST
+# calls, so both the file location and the 'SA-ctf_scoreboard' /
+# 'SA-ctf_scoreboard_admin' folder names are load-bearing.
+ensure_ctf_controller_config() {
+    if [ -f "$CTF_CONTROLLER_CONFIG" ]; then
+        return
+    fi
+    if [ ! -f "$CTF_CONTROLLER_EXAMPLE" ]; then
+        return
+    fi
+    step "[ctf] generating scoreboard_controller.config"
+    # od reads a bounded 16 bytes (unlike `tr < /dev/urandom | head -c24`,
+    # which SIGPIPEs tr when head is satisfied — fatal under pipefail).
+    local vkey
+    vkey="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+    cat > "$CTF_CONTROLLER_CONFIG" <<EOF
+[ScoreboardController]
+USER = admin
+PASS = $SPLUNK_PASS
+VKEY = $vkey
+EOF
+    info "generated (gitignored) — using Splunk 'admin' as the privileged"
+    info "answer-check service account, fine for a solo lab"
+}
+
+# Args: <csv path>. Prints a JSON array of row objects on stdout, or "[]" if
+# the file is missing / header-only.
+csv_to_json() {
+    # MSYS2_ARG_CONV_EXCL='*' (set above, for docker/curl) also stops MSYS
+    # from rewriting /d/... into D:\... for THIS native python3 — without
+    # to_winpath it silently 404s and we'd fall into the except branch below.
+    python3 -c '
+import csv, json, sys
+try:
+    with open(sys.argv[1], newline="", encoding="utf-8") as f:
+        print(json.dumps(list(csv.DictReader(f))))
+except FileNotFoundError:
+    print("[]")
+' "$(to_winpath "$1")"
+}
+
+# Args: <app> <collection> <csv path>
+import_kv_collection() {
+    local app="$1" collection="$2" csvfile="$3"
+    local base="https://localhost:8089/servicesNS/nobody/$app/storage/collections/data/$collection"
+
+    local rows
+    rows="$(csv_to_json "$csvfile")"
+    if [ "$rows" = "[]" ]; then
+        info "  $collection: no data rows in $(basename "$csvfile") — skipping"
+        return
+    fi
+
+    # Splunk pretty-prints an empty collection as "[ ]" (with a space), not
+    # the "[]" our own json.dumps produces — compare row counts, not strings.
+    # Right after the container reports healthy, the KV store subsystem for a
+    # freshly bind-mounted app can still be a few seconds behind splunkd's own
+    # REST API, so a query here can transiently 503 / return an error object
+    # instead of a list — retry rather than mistake that for "already has 1
+    # row" (len() of a 1-key error dict).
+    local existing_count attempt
+    existing_count="ERR"
+    for attempt in 1 2 3 4 5 6; do
+        existing_count="$(curl -ks -u "admin:$SPLUNK_PASS" "$base?output_mode=json" 2>/dev/null \
+            | python3 -c 'import json,sys
+try:
+    data = json.load(sys.stdin)
+    print(len(data) if isinstance(data, list) else "ERR")
+except Exception:
+    print("ERR")' 2>/dev/null)"
+        [ "$existing_count" != "ERR" ] && [ -n "$existing_count" ] && break
+        sleep 5
+    done
+    if [ "$existing_count" = "ERR" ] || [ -z "$existing_count" ]; then
+        echo "WARNING: [ctf] $collection: KV store not responding — skipping import" >&2
+        return
+    fi
+    if [ "$existing_count" -gt 0 ] && [ "$FORCE" -ne 1 ]; then
+        info "  $collection: already has $existing_count rows — skipping (--force to reimport)"
+        return
+    fi
+    if [ "$existing_count" -gt 0 ] && [ "$FORCE" -eq 1 ]; then
+        curl -ks -u "admin:$SPLUNK_PASS" -X DELETE "$base" >/dev/null
+    fi
+
+    # No -o /dev/null: MSYS2_ARG_CONV_EXCL='*' (set above) stops MSYS from
+    # rewriting /dev/null to the Windows null device for this native curl —
+    # it would fail to write there (exit 23, silenced by -s) right after the
+    # POST had already landed server-side. Append the code and split instead.
+    local resp http_code
+    resp="$(curl -ks -u "admin:$SPLUNK_PASS" -w $'\n%{http_code}' \
+        -X POST -H 'Content-Type: application/json' -d "$rows" "$base/batch_save")"
+    http_code="${resp##*$'\n'}"
+    local n
+    n="$(printf '%s' "$rows" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
+    if [ "$http_code" = "200" ]; then
+        info "  $collection: imported $n rows"
+    else
+        echo "WARNING: [ctf] $collection import returned HTTP $http_code" >&2
+    fi
+}
+
+provision_ctf_data() {
+    # CTF_MODE tokens ('v1', 'v2-official', ...) map onto the
+    # docker/ctf_seed_data/<vN>_<source>/ folder naming.
+    local seed_folder
+    case "$CTF_MODE" in
+        v1|v2|v3) seed_folder="${CTF_MODE}_writeups" ;;
+        v1-official) seed_folder="v1_official" ;;
+        v2-official) seed_folder="v2_official" ;;
+        v3-official) seed_folder="v3_official" ;;
+        *) echo "internal error: unexpected CTF_MODE '$CTF_MODE'" >&2; return 1 ;;
+    esac
+    local seed_dir="$CTF_SEED_BASE/$seed_folder"
+    if [ ! -d "$seed_dir" ]; then
+        echo "WARNING: [ctf] $seed_dir does not exist — skipping KV import" >&2
+        return
+    fi
+    step "[ctf] importing '$CTF_MODE' question/answer/hint set into KV store"
+    import_kv_collection "SA-ctf_scoreboard" "ctf_questions" "$seed_dir/ctf_questions.csv"
+    import_kv_collection "SA-ctf_scoreboard_admin" "ctf_answers" "$seed_dir/ctf_answers.csv"
+    import_kv_collection "SA-ctf_scoreboard_admin" "ctf_hints" "$seed_dir/ctf_hints.csv"
+}
+
+# ---------------------------------------------------------------------------
+# Attack-data micro-CTF (opt-in via --attackdata)
+# ---------------------------------------------------------------------------
+provision_attack_data() {
+    if [ "$ATTACKDATA" -ne 1 ]; then
+        return
+    fi
+    if [ "$HAVE_PYTHON3" -eq 0 ]; then
+        echo "WARNING: [attackdata] python3 not found — skipping (needed to download files and read the manifest)" >&2
+        return
+    fi
+
+    step "[attackdata] downloading malware log files (~330MB total, skips files already present)"
+    python3 "$(to_winpath "$REPO_ROOT/docker/download_attack_data.py")" "$REPO_ROOT_WIN"
+
+    step "[attackdata] checking attack_data index for existing data"
+    local existing_count
+    existing_count="$(curl -ks -u "admin:$SPLUNK_PASS" \
+        "https://localhost:8089/services/data/indexes/attack_data?output_mode=json" 2>/dev/null \
+        | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    print(d["entry"][0]["content"].get("totalEventCount", "0"))
+except Exception:
+    print("0")' 2>/dev/null || echo 0)"
+    existing_count="${existing_count:-0}"
+
+    if [ "$existing_count" -gt 0 ] 2>/dev/null && [ "$FORCE" -ne 1 ]; then
+        info "attack_data index already has $existing_count events — skipping ingest (--force to reimport; note: --force does NOT clear this index first, see README for the manual clear command)"
+        return
+    fi
+
+    step "[attackdata] ingesting via oneshot (one REST call per family log file)"
+    python3 -c "
+import json
+m = json.load(open(r'$REPO_ROOT_WIN\attack-data\manifest.json', encoding='utf-8'))
+for e in m:
+    print(e['family'] + '\t' + e['log_file'] + '\t' + e['sourcetype'] + '\t' + e['source'])
+" | while IFS=$'\t' read -r family logfile st src; do
+        container_path="/opt/splunk/attack_data_seed/$logfile"
+        # No -o /dev/null -- see the identical fix + comment on the CTF
+        # batch_save curl call above (MSYS2_ARG_CONV_EXCL breaks native
+        # curl's write to /dev/null).
+        # rename-source REPLACES source with $src (the Windows Event Log
+        # channel, e.g. XmlWinEventLog:...:Sysmon/Operational) rather than
+        # leaving it as the file path — several families share the same
+        # channel, so that alone can't tell them apart in SPL. Stash the
+        # family in `host` instead (search with host=<family>).
+        resp="$(curl -ks -u "admin:$SPLUNK_PASS" -w $'\n%{http_code}' \
+            "https://localhost:8089/services/data/inputs/oneshot" \
+            --data-urlencode "name=$container_path" \
+            --data-urlencode "index=attack_data" \
+            --data-urlencode "host=$family" \
+            --data-urlencode "sourcetype=$st" \
+            --data-urlencode "rename-source=$src")"
+        http_code="${resp##*$'\n'}"
+        if [ "$http_code" = "201" ] || [ "$http_code" = "200" ]; then
+            info "  [$family] queued ($logfile, sourcetype=$st)"
+        else
+            echo "WARNING: [attackdata] [$family] oneshot returned HTTP $http_code" >&2
+        fi
+    done
+    info "waiting ~15s for indexing to settle..."
+    sleep 15
+}
+
 # Iterate in stable order
 for v in v1 v2 v3; do
     if is_selected "$v"; then
@@ -376,6 +661,8 @@ for v in v1 v2 v3; do
         populate_volume "$v"
     fi
 done
+
+ensure_ctf_controller_config
 
 # ---------------------------------------------------------------------------
 # 4. Start Splunk
@@ -410,13 +697,50 @@ sleep 3
 for v in v1 v2 v3; do
     if ! is_selected "$v"; then continue; fi
     load_version "$v"
-    app_code="$(curl -ks -u "admin:$SPLUNK_PASS" -o /dev/null -w '%{http_code}' \
-        "https://localhost:8089/services/apps/local/$V_APP" || echo 000)"
-    idx_count="$(curl -ks -u "admin:$SPLUNK_PASS" \
-        "https://localhost:8089/services/data/indexes/$V_INDEX?output_mode=json" 2>/dev/null \
-        | awk -F'"' '/totalEventCount/ {for (i=1;i<=NF;i++) if ($i ~ /totalEventCount/) print $(i+2); exit}')"
+    # No -o /dev/null: see the CTF/attackdata curl calls above for why that
+    # breaks under MSYS2_ARG_CONV_EXCL (native curl can't write the response
+    # body to a path it can no longer resolve as the null device).
+    app_resp="$(curl -ks -u "admin:$SPLUNK_PASS" -w $'\n%{http_code}' \
+        "https://localhost:8089/services/apps/local/$V_APP" || echo $'\n000')"
+    app_code="${app_resp##*$'\n'}"
+    if [ "$HAVE_PYTHON3" -eq 1 ]; then
+        idx_count="$(curl -ks -u "admin:$SPLUNK_PASS" \
+            "https://localhost:8089/services/data/indexes/$V_INDEX?output_mode=json" 2>/dev/null \
+            | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    print(d["entry"][0]["content"]["totalEventCount"])
+except Exception:
+    print("?")' 2>/dev/null || echo "?")"
+    else
+        idx_count="?"
+    fi
     info "[$v] app: HTTP $app_code (200 = loaded)   index: ${idx_count:-?} events"
 done
+
+# ---------------------------------------------------------------------------
+# 7. Provision CTF scoreboard
+# ---------------------------------------------------------------------------
+step "[ctf] preparing scoreboard app"
+# Plain `docker exec` runs as the image's default 'ansible' user, who can't
+# even traverse /opt/splunk/var/log (owned splunk:splunk, mode 750) — use the
+# splunk uid so the controller's own RotatingFileHandler can write here too.
+docker exec -u "$SPLUNK_UID" "$CONTAINER" mkdir -p /opt/splunk/var/log/scoreboard 2>/dev/null || true
+if [ "$CTF_MODE" = "none" ]; then
+    info "skipped (--ctf-questions none) — apps installed, KV store untouched"
+elif [ "$HAVE_PYTHON3" -eq 0 ]; then
+    info "skipped — python3 not found (apps are installed, import manually or install python3 + re-run)"
+else
+    provision_ctf_data
+fi
+
+# ---------------------------------------------------------------------------
+# 8. Attack-data micro-CTF (opt-in)
+# ---------------------------------------------------------------------------
+if [ "$ATTACKDATA" -eq 1 ]; then
+    provision_attack_data
+fi
 
 # ---------------------------------------------------------------------------
 # Done
@@ -429,5 +753,15 @@ cat <<EOF
   Web UI   : http://localhost:8000
   Username : admin
   Password : $SPLUNK_PASS
+
+  CTF scoreboard : http://localhost:8000/en-US/app/SA-ctf_scoreboard/welcome
+  Question set   : $CTF_MODE
+EOF
+if [ "$ATTACKDATA" -eq 1 ]; then
+    cat <<EOF
+  Attack-data CTF: index=attack_data — see challenges/attack-data-ctf/
+EOF
+fi
+cat <<EOF
 
 EOF

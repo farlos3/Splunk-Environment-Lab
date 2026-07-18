@@ -1,0 +1,11 @@
+author: Teoderick Contreras
+id: c5f4387e-f21c-11ec-9f67-acde48001122
+date: '2022-06-22'
+description: Generated datasets for azorult in attack range.
+environment: attack_range
+directory: azorult
+datasets:
+- name: sysmon
+  path: /datasets/malware/azorult/sysmon.log
+  sourcetype: XmlWinEventLog
+  source: XmlWinEventLog:Microsoft-Windows-Sysmon/Operational

@@ -1,0 +1,342 @@
+[
+  {
+    "family": "acidrain",
+    "log_file": "acidrain/sysmon_linux.log",
+    "yml_file": "acidrain/acidrain.yml",
+    "sourcetype": "sysmon:linux",
+    "source": "Syslog:Linux-Sysmon/Operational",
+    "description": "Generated datasets for acidrain in attack range.",
+    "folder": "datasets/malware/acidrain",
+    "size_bytes": 14767284
+  },
+  {
+    "family": "agent_tesla",
+    "log_file": "agent_tesla/windows-powershell-xml.log",
+    "yml_file": "agent_tesla/chm_powershell.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-PowerShell/Operational",
+    "description": "Generated datasets for chm powershell in attack range.",
+    "folder": "datasets/malware/agent_tesla/chm_powershell",
+    "size_bytes": 18799
+  },
+  {
+    "family": "amadey",
+    "log_file": "amadey/amadey_autorun_reg.log",
+    "yml_file": "amadey/shell_regrun_old.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "Generated datasets for shell regrun in attack range.",
+    "folder": "datasets/malware/amadey/shell_regrun",
+    "size_bytes": 5930
+  },
+  {
+    "family": "awfulshred",
+    "log_file": "awfulshred/sysmon_linux.log",
+    "yml_file": "awfulshred/test3.yml",
+    "sourcetype": "sysmon:linux",
+    "source": "Syslog:Linux-Sysmon/Operational",
+    "description": "Generated datasets for test3 in attack range.",
+    "folder": "datasets/malware/awfulshred/test3",
+    "size_bytes": 534557
+  },
+  {
+    "family": "azorult",
+    "log_file": "azorult/sysmon.log",
+    "yml_file": "azorult/azorult.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "Generated datasets for azorult in attack range.",
+    "folder": "datasets/malware/azorult",
+    "size_bytes": 52036939
+  },
+  {
+    "family": "brute_ratel",
+    "log_file": "brute_ratel/security-xml.log",
+    "yml_file": "brute_ratel/sedebugprivilege_token_old.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Security",
+    "description": "Generated datasets for sedebugprivilege token in attack range.",
+    "folder": "datasets/malware/brute_ratel/sedebugprivilege_token",
+    "size_bytes": 489067
+  },
+  {
+    "family": "chaos_ransomware",
+    "log_file": "chaos_ransomware/sysmon.log",
+    "yml_file": "chaos_ransomware/chaos_ransomware.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "Generated datasets for chaos ransomware in attack range.",
+    "folder": "datasets/malware/chaos_ransomware",
+    "size_bytes": 26538613
+  },
+  {
+    "family": "clop",
+    "log_file": "clop/windows-xml.log",
+    "yml_file": "clop/clop_a.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:System",
+    "description": "Execution of CLOP  malware on Windows 10 endpoint and simulated service",
+    "folder": "datasets/malware/clop/clop_a",
+    "size_bytes": 1823
+  },
+  {
+    "family": "conti",
+    "log_file": "conti/windows-security.log",
+    "yml_file": "conti/conti_leak.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Security",
+    "description": "simulated Execution of conti leak malware in attack range.",
+    "folder": "datasets/malware/conti/conti_leak",
+    "size_bytes": 2690
+  },
+  {
+    "family": "cyclopsblink",
+    "log_file": "cyclopsblink/sysmon_linux.log",
+    "yml_file": "cyclopsblink/cyclopsblink.yml",
+    "sourcetype": "sysmon:linux",
+    "source": "Syslog:Linux-Sysmon/Operational",
+    "description": "Generated datasets for cyclopsblink in attack range.",
+    "folder": "datasets/malware/cyclopsblink",
+    "size_bytes": 80180920
+  },
+  {
+    "family": "dcrat",
+    "log_file": "dcrat/windows-powershell-xml.log",
+    "yml_file": "dcrat/dcrat_enum_camera.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-PowerShell/Operational",
+    "description": "Generated datasets for dcrat enum camera in attack range.",
+    "folder": "datasets/malware/dcrat/dcrat_enum_camera",
+    "size_bytes": 1028
+  },
+  {
+    "family": "doublezero_wiper",
+    "log_file": "doublezero_wiper/sysmon.log",
+    "yml_file": "doublezero_wiper/doublezero_wiper.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "Generated datasets for doublezero wiper in attack range.",
+    "folder": "datasets/malware/doublezero_wiper",
+    "size_bytes": 18964977
+  },
+  {
+    "family": "fin7",
+    "log_file": "fin7/ldap_module_loaded_sysmon.log",
+    "yml_file": "fin7/fin7_js_2.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "fin7 js implant data sets.",
+    "folder": "datasets/malware/fin7/fin7_js_2",
+    "size_bytes": 4518
+  },
+  {
+    "family": "gootloader",
+    "log_file": "gootloader/windows-sysmon.log",
+    "yml_file": "gootloader/partial_ttps.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "Detection of gootloader common behaviors sourced from manual malware",
+    "folder": "datasets/malware/gootloader/partial_ttps",
+    "size_bytes": 22927
+  },
+  {
+    "family": "hermetic_wiper",
+    "log_file": "hermetic_wiper/sysmon.log",
+    "yml_file": "hermetic_wiper/hermetic_wiper.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "Generated datasets for hermetic wiper in attack range.",
+    "folder": "datasets/malware/hermetic_wiper",
+    "size_bytes": 5890556
+  },
+  {
+    "family": "icedid",
+    "log_file": "icedid/sysmon.log",
+    "yml_file": "icedid/cmd_carry_str_param.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "cmd carry out string command parameter data sets.",
+    "folder": "datasets/malware/icedid/cmd_carry_str_param",
+    "size_bytes": 3292157
+  },
+  {
+    "family": "industroyer2",
+    "log_file": "industroyer2/sysmon.log",
+    "yml_file": "industroyer2/industroyer2.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "Generated datasets for industroyer2 in attack range.",
+    "folder": "datasets/malware/industroyer2",
+    "size_bytes": 13670633
+  },
+  {
+    "family": "lockbit_ransomware",
+    "log_file": "lockbit_ransomware/sysmon.log",
+    "yml_file": "lockbit_ransomware/lockbit_ransomware.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "Generated datasets for lockbit ransomware in attack range.",
+    "folder": "datasets/malware/lockbit_ransomware",
+    "size_bytes": 16706353
+  },
+  {
+    "family": "notdoor",
+    "log_file": "notdoor/windows-sysmon.log",
+    "yml_file": "notdoor/outlook_macro.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "logs from NotDoor malware execution",
+    "folder": "datasets/malware/notdoor/outlook_macro",
+    "size_bytes": 1376
+  },
+  {
+    "family": "olympic_destroyer",
+    "log_file": "olympic_destroyer/system.log",
+    "yml_file": "olympic_destroyer/olympic_destroyer.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "Generated datasets for olympic destroyer in attack range.",
+    "folder": "datasets/malware/olympic_destroyer",
+    "size_bytes": 350695
+  },
+  {
+    "family": "prestige_ransomware",
+    "log_file": "prestige_ransomware/sysmon.log",
+    "yml_file": "prestige_ransomware/prestige_ransomware.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "Generated datasets for prestige ransomware in attack range.",
+    "folder": "datasets/malware/prestige_ransomware",
+    "size_bytes": 24024557
+  },
+  {
+    "family": "qakbot",
+    "log_file": "qakbot/sysmon_wermgr_remote.log",
+    "yml_file": "qakbot/remote_thread.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "Generated datasets for remote thread in attack range.",
+    "folder": "datasets/malware/qakbot/remote_thread",
+    "size_bytes": 112932
+  },
+  {
+    "family": "ransomware_ttp",
+    "log_file": "ransomware_ttp/windows-powershell.log",
+    "yml_file": "ransomware_ttp/data.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "Automatically categorized datasets in directory data2",
+    "folder": "datasets/malware/ransomware_ttp/data2",
+    "size_bytes": 34171
+  },
+  {
+    "family": "redline",
+    "log_file": "redline/sysmon.log",
+    "yml_file": "redline/modify_registry.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "Generated datasets for chrome local state simulate access in attack range.",
+    "folder": "datasets/malware/redline/modify_registry",
+    "size_bytes": 8845034
+  },
+  {
+    "family": "remcos",
+    "log_file": "remcos/sysmon.log",
+    "yml_file": "remcos/remcos_dynwrapx.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "simulated remcos script loading dynwrapx.dll for shellcode execution",
+    "folder": "datasets/malware/remcos/remcos_dynwrapx",
+    "size_bytes": 2889
+  },
+  {
+    "family": "revil",
+    "log_file": "revil/windows-powershell.log",
+    "yml_file": "revil/data.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "Automatically categorized datasets in directory inf1",
+    "folder": "datasets/malware/revil/inf1",
+    "size_bytes": 26389
+  },
+  {
+    "family": "ryuk",
+    "log_file": "ryuk/windows-sysmon.log",
+    "yml_file": "ryuk/ryuk.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "Execution of ryuk malware on Windows 10 endpoint.",
+    "folder": "datasets/malware/ryuk",
+    "size_bytes": 10925432
+  },
+  {
+    "family": "snakemalware",
+    "log_file": "snakemalware/snake_malware_regblob-windows-sysmon.log",
+    "yml_file": "snakemalware/snakemalware.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "Simulation of Snake Malware endpoint artifacts.",
+    "folder": "datasets/malware/snakemalware",
+    "size_bytes": 2158
+  },
+  {
+    "family": "swift_slicer",
+    "log_file": "swift_slicer/sysmon.log",
+    "yml_file": "swift_slicer/swift_slicer.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "Generated datasets for swift slicer in attack range.",
+    "folder": "datasets/malware/swift_slicer",
+    "size_bytes": 76113411
+  },
+  {
+    "family": "trickbot",
+    "log_file": "trickbot/windows-xml.log",
+    "yml_file": "trickbot/data.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Security",
+    "description": "Automatically categorized datasets in directory exe_smbshare",
+    "folder": "datasets/malware/trickbot/exe_smbshare",
+    "size_bytes": 4587
+  },
+  {
+    "family": "vilsel",
+    "log_file": "vilsel/windows-xml.log",
+    "yml_file": "vilsel/vilsel.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Security",
+    "description": "simulated ioc from vilsel malware.",
+    "folder": "datasets/malware/vilsel",
+    "size_bytes": 3240
+  },
+  {
+    "family": "warzone_rat",
+    "log_file": "warzone_rat/loaded_unsigned_dll.log",
+    "yml_file": "warzone_rat/unsigned_dll_loaded_old.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    "description": "Generated datasets for unsigned dll loaded in attack range.",
+    "folder": "datasets/malware/warzone_rat/unsigned_dll_loaded",
+    "size_bytes": 4260
+  },
+  {
+    "family": "winpeas",
+    "log_file": "winpeas/windows-powershell-xml2.log",
+    "yml_file": "winpeas/powershell.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-PowerShell/Operational",
+    "description": "Generated datasets for powershell in attack range.",
+    "folder": "datasets/malware/winpeas/powershell",
+    "size_bytes": 937
+  },
+  {
+    "family": "winter-vivern",
+    "log_file": "winter-vivern/windows-powershell-xml.log",
+    "yml_file": "winter-vivern/pwh_uploadstring.yml",
+    "sourcetype": "XmlWinEventLog",
+    "source": "XmlWinEventLog:Microsoft-Windows-PowerShell/Operational",
+    "description": "Generated datasets for pwh uploadstring in attack range.",
+    "folder": "datasets/malware/winter-vivern/pwh_uploadstring",
+    "size_bytes": 4333
+  }
+]

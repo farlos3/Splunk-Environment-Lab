@@ -1,0 +1,6 @@
+# Export the index and extractions globally so they apply no matter which
+# app context the search runs in (e.g. Search & Reporting), not just when
+# searching inside this add-on.
+[]
+access = read : [ * ], write : [ admin ]
+export = system

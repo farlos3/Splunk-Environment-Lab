@@ -44,12 +44,31 @@ services:
       # entrypoint runs `chown -R` over /opt/splunk/etc/apps on every
       # boot, which fails hard (EROFS) against a :ro mount.
       - ./apps/bots_sysmon_extractions:/opt/splunk/etc/apps/bots_sysmon_extractions
+      # CTF scoreboard (splunk/SA-ctf_scoreboard + companion _admin app). Folder
+      # names are load-bearing: scoreboard_controller.py hardcodes the literal
+      # app names 'SA-ctf_scoreboard' / 'SA-ctf_scoreboard_admin' in KV store
+      # REST paths and its own config-file path — renaming either folder breaks
+      # the app. setup.sh provisions scoreboard_controller.config and imports
+      # question/answer/hint CSVs from ctf_seed_data/ after the container is up.
+      - ./apps/SA-ctf_scoreboard:/opt/splunk/etc/apps/SA-ctf_scoreboard
+      - ./apps/SA-ctf_scoreboard_admin:/opt/splunk/etc/apps/SA-ctf_scoreboard_admin
+      # attack_data micro-CTF: index definition + XML field extractions,
+      # plus the raw malware log files ingested via `splunk add oneshot`
+      # at setup time. NOT read-only even though it's outside etc/apps —
+      # a :ro mount here hung the ansible entrypoint's chown pass instead
+      # of cleanly EROFS-ing (unlike etc/apps, its actual scope is wider
+      # than the comment above implies — learned the hard way).
+      - ./apps/attack_data_ingest:/opt/splunk/etc/apps/attack_data_ingest
+      - ../attack-data:/opt/splunk/attack_data_seed
       # Persistent state — survives `docker compose restart`, killed by `down -v`.
       - splunk-var:/opt/splunk/var
       - splunk-etc-users:/opt/splunk/etc/users
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-fks", "https://localhost:8089/services/server/info"]
+      # -u is required: unauthenticated /services/server/info now 401s on this
+      # image, which made `curl -f` (no -u) treat every check as a failure and
+      # the container as permanently "unhealthy" even once splunkd was fine.
+      test: ["CMD-SHELL", "curl -fks -u admin:$$SPLUNK_PASSWORD https://localhost:8089/services/server/info"]
       interval: 30s
       timeout: 10s
       retries: 5
