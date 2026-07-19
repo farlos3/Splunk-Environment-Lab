@@ -20,8 +20,9 @@
 #   8. (opt-in, --attackdata) download + ingest the attack_data micro-CTF logs
 #
 # Usage:
-#   ./setup.sh                          # interactive: prompts for v1/v2/v3/all
-#                                       # (no TTY -> defaults to v1)
+#   ./setup.sh                          # interactive: prompts Normal-vs-CTF mode,
+#                                       # then v1/v2/v3/all (no TTY -> skips both
+#                                       # prompts, same as today: v1 + CTF on)
 #   ./setup.sh --v1 --v2                # multiple datasets
 #   ./setup.sh --all                    # v1, v2, v3
 #   ./setup.sh --v2 --skip-download     # use the .tgz already in bots-data/botsv2/
@@ -150,6 +151,23 @@ while [ $# -gt 0 ]; do
         *) echo "Unknown argument: $1"; exit 1 ;;
     esac
 done
+
+# If --ctf-questions wasn't given explicitly, ask interactively (when we
+# have a terminal) whether this run is plain BOTS-practice or should also
+# stand up the CTF scoreboard. Skipped whenever --ctf-questions was passed
+# (any value, including "none"), so automation/CI keeps working.
+if [ -z "$CTF_MODE" ] && [ -t 0 ]; then
+    echo
+    echo "Set up mode:"
+    echo "  1) Normal — just the BOTS data, for SPL practice / challenges/splunk-bots"
+    echo "  2) CTF    — also stand up the CTF scoreboard (scored Q&A UI)"
+    printf 'Enter choice [1/2] (default: 2): '
+    read -r _mode_sel
+    case "$_mode_sel" in
+        1) CTF_MODE="none" ;;
+        *) ;;  # leave empty -> auto-resolved below to match the BOTS version(s) picked next
+    esac
+fi
 
 # If no dataset flags were given, ask interactively (when we have a
 # terminal). Passing --v1/--v2/--v3/--all still skips the prompt, so
