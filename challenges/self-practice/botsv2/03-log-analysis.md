@@ -74,17 +74,17 @@ fields out of it*. Crucial lesson up front:
 
 ## Web & network (extracted)
 
-### Q44 — Web request analysis
-**Find:** the shape of the day's traffic to Frothly's web server — which HTTP status codes and methods dominate, and any odd URIs.
-**Hint:** `08/23/2017 00:00:00` → `08/24/2017 00:00:00` on `access_combined`. `stats count by status method`, `sort` descending; then eyeball `uri` for odd paths.
+### Q44 — Web request analysis: is this day actually interesting?
+**Find:** the shape of the day's traffic to Frothly's web server — and then a judgment call: is any of it actually suspicious, or is it all routine?
+**Hint:** `08/23/2017 00:00:00` → `08/24/2017 00:00:00` on `access_combined`. `stats count by status method`, `sort` descending. Don't stop at the count — pull the `uri` behind each non-`200` bucket specifically (`404`, `403`, `302`) and read what they actually are. Ask of each one: does this look like probing/scanning, or a mundane asset request (favicon, cached font, redirect)? Write down your verdict before checking the solution — "nothing interesting happened in this window" is a legitimate, common finding in a 226M-event dataset, and knowing *why* you can rule a day out is as useful as knowing when something's wrong.
 
-### Q45 — DNS via Splunk Stream (JSON)
-**Find:** what the environment is resolving — the most-queried domains, and the NetBIOS/WPAD junk you'll learn to filter before hunting.
-**Hint:** `stats count by query{}` on `stream:dns`, `sort` descending. Group by `query{}` (the DNS question, always present) — same rule as v1.
+### Q45 — DNS via Splunk Stream (JSON): find the filter, not just the count
+**Find:** what the environment is resolving — and the specific, reusable filter that separates real lookups from protocol noise.
+**Hint:** `stats count by query{}` on `stream:dns` (same day window), `sort` descending. Look closely at the single noisiest value: is it shaped like a domain (has dots, readable words), or a long fixed-width run of characters with no dots at all? That shape is the tell for **NetBIOS name-encoding**, not a DNS lookup you care about. Once you've spotted the pattern, write a filter that excludes anything shaped that way (hint: real domains contain a literal `.`) and re-run the same `stats` — what actual domains rise to the top once the NetBIOS/WPAD junk drops out?
 
-### Q46 — Suricata IDS alerts
-**Find:** what the IDS is actually firing on — rank the signatures + categories and pick out what stands out (scanning, TOR, malware).
-**Hint:** `stats count by alert.signature alert.category` on `suricata`, `sort` descending. You'll spot port-135 scanning, TOR, and an **OSX backdoor** signature — pointers for Stage 4.
+### Q46 — Suricata IDS alerts: separate the scanner noise from the one signature that matters
+**Find:** what the IDS is actually firing on — and specifically, which single signature is a genuine lead worth carrying into Stage 4, buried under everything else.
+**Hint:** `stats count by alert.signature alert.category` on `suricata` (**all time** — dataset-wide counts), `sort` descending. The top row will dwarf everything else by volume — that's a port scan, high noise / low signal, and TOR/TLS signatures will cluster near the top too. Skip past all of those on purpose and keep reading down the list for a **low-count, precisely-named** signature that references an operating system Frothly's Windows-heavy environment shouldn't otherwise be talking about. That's your Stage-4 pointer — one alert out of thousands is the one worth chasing.
 
 ## The sources that need `rex` (no TA)
 
