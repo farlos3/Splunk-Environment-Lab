@@ -537,29 +537,85 @@ Q43's funnel resolves to a concrete, verified timeline on 08/24:
 
 **Lesson:** the two "obvious" places to check — process-creation volume (Q41) and logon spikes (Q42) — come up empty or misleading; the actual compromise is invisible to both. It only surfaces in Q43 once you stop looking at *volume* and filter on *known markers* instead. `wrk-btun` is the foothold (03:29); it spreads to `wrk-klagerf` by the same WMI technique inside 26 minutes, and both hosts have working persistence by ~04:09 — a ~40-minute window from initial access to a second persistent foothold. This is a preview of Stage 4's Threat Hunting track ([`../../specialized/botsv2/01-threat-hunting.md`](../../specialized/botsv2/01-threat-hunting.md)), which follows this same C2 to a third host (`venus`) and names the accounts behind it (`billy.tun` foothold → `service3` lateral movement).
 
-### Q44 — Web
+### Q44 — Web: proving the day is clean, the Q40 way
+
+**Step 1 — measure.**
 ```spl
 index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
 | stats count by status method
 | sort - count
 ```
-Same query and result as Q8 (12,291 rows across `200/GET`, `200/POST`, `403/GET`, `304/GET`, `404/GET`, `302/GET` — see Q8's table and its missing-`status` gotcha). Eyeballing odd URIs: `404`s are just `/favicon.ico` (231, harmless); `403`s are almost entirely cache-busted font requests — `/fonts/icomoon/icomoon.ttf?srf3rx` (120), `.woff?srf3rx` (89), `.woff?qtatmt` (82) — a CDN/theme asset blocked by a web-server rule, not scanning. Nothing in this day's status/URI mix screams "attack"; that's expected — the interesting web activity (Q40) lives on 08/11 and 08/16, a different window entirely.
+Same query and result as Q8 — **12,291 rows** across `200/GET`, `200/POST`, `403/GET`, `304/GET`, `404/GET`, `302/GET` (see Q8's table and its missing-`status` gotcha).
 
-### Q45 DNS (JSON stream)
+**Step 2 — read the non-200 buckets.**
+```spl
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00" (status=403 OR status=404)
+| stats count by status uri | sort - count
+```
+`404`s are just `/favicon.ico` (231, harmless — every browser requests it). `403`s are almost entirely the *same three* cache-busted font requests, repeating: `/fonts/icomoon/icomoon.ttf?srf3rx` (120), `.woff?srf3rx` (89), `.woff?qtatmt` (82) — a CDN/theme asset blocked by a web-server rule, not a scanner probing distinct paths.
+
+**Step 3 — apply Q40's yardstick.**
+```spl
+index=botsv2 sourcetype=access_combined earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| stats dc(uri_path) as paths count as reqs by clientip
+| sort - paths | head 10
+```
+Verified top: `4.14.104.185` (**90** distinct paths, 2,005 requests), then `98.229.101.186` (46), `98.116.39.236` (43), `68.99.6.195` (42) — a smooth, gradual drop-off. Compare to Q40: the actual scanner (`45.77.65.211`, on 08/11) hit **4,022** distinct paths, 50× its nearest neighbor. Nothing here is remotely close to that shape.
+
+**Step 4 — verdict.** No scanner, no attack signal in this day's web traffic — 90 paths from a normal visitor vs. Q40's 4,022-path outlier is not the same phenomenon, it's routine browsing. That's expected: the interesting web activity (Q40) lives on **08/11 and 08/16**, a different window entirely. "This day is clean" is the correct, defensible answer here — reached by measurement, not assumption.
+
+### Q45 — DNS (JSON stream): filter it, then check what it ate
+
+**Step 1 — measure, unfiltered.**
 ```spl
 index=botsv2 sourcetype=stream:dns earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
 | stats count by query{}
-| sort - count
+| sort - count | head 5
 ```
-Group by `query{}` (always-present question field). Verified 08/23 top: **`FHFAEBEECACACACACACACACACACACAAA`** (6,276 — a **NetBIOS-encoded** name, i.e. noise), then real domains `outlook.office365.com`, `wpad`, `manage.office.com`, `nexus.officeapps.live.com`. Lesson: the noisiest `query{}` is often NetBIOS/WPAD junk — filter it (`| regex "query{}"="\."` drops dot-less NetBIOS names) before hunting.
+Verified: **`FHFAEBEECACACACACACACACACACACAAA`** (6,276 — NetBIOS-encoded name, noise), `outlook.office365.com` (934), **`wpad`** (888, bare/dot-less), `manage.office.com` (737), `nexus.officeapps.live.com` (528).
 
-### Q46 Suricata
+**Step 2 — filter and re-run.**
+```spl
+index=botsv2 sourcetype=stream:dns earliest="08/23/2017:00:00:00" latest="08/24/2017:00:00:00"
+| regex "query{}"="\."
+| stats count by query{} | sort - count | head 10
+```
+Verified top 10: `outlook.office365.com` (934), `manage.office.com` (737), `nexus.officeapps.live.com` (528), `nexusrules.officeapps.live.com` (472), `logx.optimizely.com` (440), `wpad.frothly.local` (378), `15.1.168.192.in-addr.arpa` (364), `bea4.cnn.com` (302), `ocos-office365-s2s.msedge.net` (284), `b.scorecardresearch.com` (280) — the NetBIOS string is gone; real Office 365/CDN/analytics traffic.
+
+**Step 3 — check the casualties.** The dot-filter dropped more than just the NetBIOS string: the bare `wpad` (888 hits) — the actual WPAD auto-discovery broadcast query — vanished too, while its resolved FQDN cousin `wpad.frothly.local` (378) survived, since it has dots. This is the filter's blind spot: it can't tell "NetBIOS junk" from "any other legitimately dot-less query," it just drops anything without a `.`. In this dataset that collateral happens to be benign (WPAD is expected, and its FQDN form still shows up), but a rigorous read checks the excluded side of a filter, not just what surfaced.
+
+**Step 4 — conclusion.** The dot-filter is a fast, reusable first pass for killing NetBIOS noise on this dataset, not a perfect domain classifier — it also strips any other short, dot-less token, so double-check what it drops before trusting a "clean" list.
+
+### Q46 — Suricata: from 5,000+ events of noise to a 4-event lead
+
+**Step 1 — measure the raw signature list.**
 ```spl
 index=botsv2 sourcetype=suricata alert.signature=* earliest=0
 | stats count by alert.signature alert.category
 | sort - count
 ```
-Top: `ET SCAN … Port 135` (5,330), TLS/TOR, `ET POLICY Vulnerable Java`, and **`ET TROJAN OSX Backdoor Quimitchin DNS Lookup`** — the macOS malware pointer for Stage 4.
+Top: `ET SCAN … Port 135` (5,330), then TLS/TOR and `ET POLICY Vulnerable Java` signatures — high-volume, low-signal.
+
+**Step 2 — zoom out to categories.**
+```spl
+index=botsv2 sourcetype=suricata alert.signature=* earliest=0
+| stats count by alert.category | sort - count
+```
+Verified: **`Misc activity`** (5,344 — the scan + TOR/TLS + policy noise from Step 1, all lumped together), `Generic Protocol Command Decode` (44), `Potentially Bad Traffic` (12), `Misc Attack` (7), and **`A Network Trojan was detected`** (**5** — the smallest category by far).
+
+**Step 3 — drill into the smallest category.**
+```spl
+index=botsv2 sourcetype=suricata "alert.category"="A Network Trojan was detected" earliest=0
+| stats count by alert.signature
+```
+Verified: exactly two signatures — `ET TROJAN DNS Reply Sinkhole - Anubis - 195.22.26.192/26` (1) and **`ET TROJAN OSX Backdoor Quimitchin DNS Lookup`** (4). The second one names an OS Frothly's Windows-heavy environment shouldn't otherwise be talking about — the macOS malware pointer for Stage 4.
+
+**Step 4 — identify the host.**
+```spl
+index=botsv2 sourcetype=suricata "alert.signature"="*Quimitchin*" earliest=0
+| stats count by src_ip dest_ip
+```
+Verified: `src_ip=10.0.4.2 → dest_ip=10.0.1.100`, 4 events — 5,344 alerts of scanning/TOR/policy noise narrowed down to one internal host making DNS lookups tied to a known macOS backdoor. That host is the concrete lead Stage 4's threat-hunting track picks up.
 
 ### Q47 Palo Alto (CSV, needs rex)
 No auto-fields. Read `_raw` (comma-separated), then extract. Example raw:

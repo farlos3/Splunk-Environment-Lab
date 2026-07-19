@@ -74,17 +74,38 @@ fields out of it*. Crucial lesson up front:
 
 ## Web & network (extracted)
 
-### Q44 — Web request analysis: is this day actually interesting?
-**Find:** the shape of the day's traffic to Frothly's web server — and then a judgment call: is any of it actually suspicious, or is it all routine?
-**Hint:** `08/23/2017 00:00:00` → `08/24/2017 00:00:00` on `access_combined`. `stats count by status method`, `sort` descending. Don't stop at the count — pull the `uri` behind each non-`200` bucket specifically (`404`, `403`, `302`) and read what they actually are. Ask of each one: does this look like probing/scanning, or a mundane asset request (favicon, cached font, redirect)? Write down your verdict before checking the solution — "nothing interesting happened in this window" is a legitimate, common finding in a 226M-event dataset, and knowing *why* you can rule a day out is as useful as knowing when something's wrong.
+### Q44 — Web request analysis: prove the day is clean, don't just assume it
+**Find:** whether Frothly's web server saw anything suspicious on 08/23 — but back the verdict with the *same* technique Q40 used to actually catch a scanner, not a guess.
 
-### Q45 — DNS via Splunk Stream (JSON): find the filter, not just the count
-**Find:** what the environment is resolving — and the specific, reusable filter that separates real lookups from protocol noise.
-**Hint:** `stats count by query{}` on `stream:dns` (same day window), `sort` descending. Look closely at the single noisiest value: is it shaped like a domain (has dots, readable words), or a long fixed-width run of characters with no dots at all? That shape is the tell for **NetBIOS name-encoding**, not a DNS lookup you care about. Once you've spotted the pattern, write a filter that excludes anything shaped that way (hint: real domains contain a literal `.`) and re-run the same `stats` — what actual domains rise to the top once the NetBIOS/WPAD junk drops out?
+**Step 1 — measure.** `08/23/2017 00:00:00` → `08/24/2017 00:00:00` on `access_combined`. `stats count by status method`, `sort` descending. You'll get a handful of buckets across a few thousand rows — small enough to read, but don't stop here.
 
-### Q46 — Suricata IDS alerts: separate the scanner noise from the one signature that matters
-**Find:** what the IDS is actually firing on — and specifically, which single signature is a genuine lead worth carrying into Stage 4, buried under everything else.
-**Hint:** `stats count by alert.signature alert.category` on `suricata` (**all time** — dataset-wide counts), `sort` descending. The top row will dwarf everything else by volume — that's a port scan, high noise / low signal, and TOR/TLS signatures will cluster near the top too. Skip past all of those on purpose and keep reading down the list for a **low-count, precisely-named** signature that references an operating system Frothly's Windows-heavy environment shouldn't otherwise be talking about. That's your Stage-4 pointer — one alert out of thousands is the one worth chasing.
+**Step 2 — read the non-200 buckets.** Pull the `uri` behind the `404` and `403` rows specifically (`stats count by uri` filtered to each status). Are these one-off odd paths, or the *same* couple of URIs repeating with different query strings?
+
+**Step 3 — apply Q40's yardstick to this day.** Q40 didn't spot its scanner by request volume — it used **path diversity**: `stats dc(uri_path) as paths count by clientip`, `sort - paths`. Run that same measure here. What's the highest `paths` count you see, and how does it compare to the 4,022-path / 50× gap that flagged `45.77.65.211` on 08/11?
+
+**Step 4 — write the verdict.** Given Step 2's URIs and Step 3's diversity numbers, is there a scanner hiding in this day's traffic, or not? A "no" backed by a specific comparison to Q40's numbers is a real, defensible finding — not a shrug.
+
+### Q45 — DNS via Splunk Stream (JSON): filter it, then check what the filter ate
+**Find:** the real domains the environment is resolving — and confirm your filter isn't quietly throwing away something legitimate along with the noise.
+
+**Step 1 — measure, unfiltered.** `stats count by query{}` on `stream:dns` (same day window), `sort` descending. Look at the top few rows: one will dwarf the rest and won't look like a domain at all (no dots, fixed-width, odd character mix). Two more will be short, bare, dot-less words.
+
+**Step 2 — name the pattern.** The dwarfing entry is **NetBIOS name-encoding**, not a real lookup. Write a filter that excludes anything shaped that way (real domains contain a literal `.`) and re-run — what corporate/SaaS domains rise to the top once it's gone?
+
+**Step 3 — check the casualties.** Your dot-filter didn't only remove the NetBIOS string — it also caught a *different*, legitimate-looking `query{}` value that's short and dot-less too. Diff the unfiltered Step-1 top 10 against the filtered Step-2 top 10: what dropped out that you didn't intend to drop, and why does it make sense that this particular hostname is queried both with and without a domain suffix?
+
+**Step 4 — conclude.** State, in one line, what your filter is actually good for (and not good for) based on Step 3 — that's the real deliverable, not the domain list itself.
+
+### Q46 — Suricata IDS alerts: from 5,000+ events of noise to a 4-event lead
+**Find:** the single host and signature worth carrying into Stage 4 — reached by narrowing down from the whole alert volume, not by scrolling for it.
+
+**Step 1 — measure the raw signature list.** `stats count by alert.signature alert.category` on `suricata` (**all time** — dataset-wide), `sort` descending. One scanning signature dwarfs everything.
+
+**Step 2 — zoom out to categories.** Collapse to just `stats count by alert.category`, `sort` descending. One category should account for the overwhelming majority of all alerts (that's Step 1's scan, plus TOR/TLS and policy noise, all lumped together) — and at least one category should be barely-there, in the single digits.
+
+**Step 3 — drill into the smallest category.** Filter to just that near-empty `alert.category` and list its `alert.signature` values with counts. You should land on exactly two distinct signatures, a handful of events total — one is a DNS sinkhole reply, the other names an operating system Frothly's Windows-heavy environment shouldn't otherwise be talking about.
+
+**Step 4 — identify the host.** `stats count by src_ip dest_ip` filtered to that OS-naming signature. Which internal host triggered it, and what did it talk to? That pairing is your concrete Stage-4 starting point.
 
 ## The sources that need `rex` (no TA)
 
