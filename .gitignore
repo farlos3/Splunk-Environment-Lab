@@ -37,6 +37,17 @@ attack-data/**/*.json
 !attack-data/README.md
 
 # -----------------------------------------------------------------------------
+# Official Splunk BOTS CTF question/answer/hint data. This is Splunk's
+# proprietary content, requested directly from Splunk (not ours to publish) —
+# see docker/CTF_SCOREBOARD.md for how to request it via email. Keep the
+# vN_official/README.md placeholder in git, block whatever real content lands
+# inside the folder.
+# -----------------------------------------------------------------------------
+docker/ctf_seed_data/v1_official/botsv1content/
+docker/ctf_seed_data/v2_official/botsv2content/
+docker/ctf_seed_data/v3_official/botsv3content/
+
+# -----------------------------------------------------------------------------
 # Splunk artefacts — bucket internals, app packages, installers
 # -----------------------------------------------------------------------------
 

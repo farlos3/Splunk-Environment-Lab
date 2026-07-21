@@ -145,7 +145,8 @@ scoring, hints — on top of the BOTS data, using Splunk's own
 [`SA-ctf_scoreboard_admin`](https://github.com/splunk/SA-ctf_scoreboard_admin)
 apps — the same apps Splunk used internally to run early BOTS
 competitions (deprecated by Splunk as of January 2022, still functional
-here). Installed automatically by `setup.sh`:
+here). Installed automatically by `setup.sh` — running it interactively
+also asks which question set to load:
 
 ```bash
 ./setup.sh --v1                              # BOTSv1 data + v1 writeup questions (default)
@@ -154,12 +155,16 @@ here). Installed automatically by `setup.sh`:
 ```
 
 Then open <http://localhost:8000/en-US/app/SA-ctf_scoreboard/welcome>
-(`admin` / `p@ssw0rd`). Questions come from
+(`admin` / `p@ssw0rd`). By default questions come from
 `docker/ctf_seed_data/<vN>_writeups/`, derived from the
 `challenges/splunk-bots/` walkthroughs below — only one question set can
 be "live" at a time (see why, plus full setup/config detail,
 troubleshooting, and the compatibility patch this lab needed, in
-**[docker/CTF_SCOREBOARD.md](docker/CTF_SCOREBOARD.md)**).
+**[docker/CTF_SCOREBOARD.md](docker/CTF_SCOREBOARD.md)**). Want the real
+Splunk-authored questions instead of the write-up-derived set? See
+**"Requesting the official question set"** in
+[docker/CTF_SCOREBOARD.md](docker/CTF_SCOREBOARD.md) for how to email
+Splunk and get them.
 
 ## Attack data micro-CTF (optional, opt-in)
 

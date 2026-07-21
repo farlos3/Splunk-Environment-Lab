@@ -20,9 +20,10 @@
 #   8. (opt-in, --attackdata) download + ingest the attack_data micro-CTF logs
 #
 # Usage:
-#   ./setup.sh                          # interactive: prompts Normal-vs-CTF mode,
-#                                       # then v1/v2/v3/all (no TTY -> skips both
-#                                       # prompts, same as today: v1 + CTF on)
+#   ./setup.sh                          # interactive: prompts v1/v2/v3/all,
+#                                       # then official-vs-writeups question
+#                                       # set (no TTY -> skips both prompts,
+#                                       # defaults to v1 + writeups)
 #   ./setup.sh --v1 --v2                # multiple datasets
 #   ./setup.sh --all                    # v1, v2, v3
 #   ./setup.sh --v2 --skip-download     # use the .tgz already in bots-data/botsv2/
@@ -51,11 +52,13 @@
 # sense if only the v1 index is loaded. <source> is 'writeups' (derived from
 # https://github.com/chan2git/splunk-bots; BasePoints inferred from the
 # question-number hundreds digit, NOT real competition scoring) or 'official'
-# (empty placeholder — see the README in each docker/ctf_seed_data/<vN>_official/).
-# --ctf-questions picks the set explicitly; left unset, it defaults to
-# '<vN>-writeups' for whichever single BOTS version was selected via
+# (empty placeholder until you request the real set from Splunk — see
+# docker/CTF_SCOREBOARD.md's "Requesting the official question set").
+# --ctf-questions picks the set explicitly; left unset with a TTY available,
+# an interactive prompt asks official-vs-writeups (default: writeups) and
+# combines that with whichever single BOTS version was selected via
 # --v1/--v2/--v3 (ambiguous with multiple/no versions selected -> falls back
-# to v1-writeups with a note).
+# to v1-<source> with a note); with no TTY, defaults straight to v1-writeups.
 #
 # The service account the scoreboard uses to fetch answers is just the Splunk
 # 'admin' user (see scoreboard_controller.config.example) — fine for a
@@ -152,23 +155,6 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# If --ctf-questions wasn't given explicitly, ask interactively (when we
-# have a terminal) whether this run is plain BOTS-practice or should also
-# stand up the CTF scoreboard. Skipped whenever --ctf-questions was passed
-# (any value, including "none"), so automation/CI keeps working.
-if [ -z "$CTF_MODE" ] && [ -t 0 ]; then
-    echo
-    echo "Set up mode:"
-    echo "  1) Normal — just the BOTS data, for SPL practice / challenges/splunk-bots"
-    echo "  2) CTF    — also stand up the CTF scoreboard (scored Q&A UI)"
-    printf 'Enter choice [1/2] (default: 2): '
-    read -r _mode_sel
-    case "$_mode_sel" in
-        1) CTF_MODE="none" ;;
-        *) ;;  # leave empty -> auto-resolved below to match the BOTS version(s) picked next
-    esac
-fi
-
 # If no dataset flags were given, ask interactively (when we have a
 # terminal). Passing --v1/--v2/--v3/--all still skips the prompt, so
 # automation/CI keeps working. With no TTY (piped input), fall back to
@@ -201,22 +187,50 @@ if ! any_selected; then
     fi
 fi
 
-# Resolve --ctf-questions default now that BOTS dataset selection is final:
-# match whichever single version was selected, else fall back to v1.
+# If --ctf-questions wasn't given explicitly, ask interactively (when we
+# have a terminal) which question set to load: the community write-ups that
+# ship with this repo, or the official Splunk set (which you have to request
+# and drop in yourself — see docker/CTF_SCOREBOARD.md). Skipped whenever
+# --ctf-questions was passed (any value, including "none"), so automation/CI
+# keeps working. The scoreboard itself is always provisioned now — there's
+# no more "normal, no scoreboard" prompt; use --ctf-questions none for that.
+CTF_SOURCE=""
+if [ -z "$CTF_MODE" ] && [ -t 0 ]; then
+    echo
+    echo "Which CTF question set do you want to load?"
+    echo "  1) Community write-ups — converted from chan2git/splunk-bots,"
+    echo "     ships with this repo, no extra steps"
+    echo "  2) Official Splunk questions — the real thing; only pick this if"
+    echo "     you've already requested it from Splunk and dropped the CSVs"
+    echo "     into docker/ctf_seed_data/vN_official/ (see docker/CTF_SCOREBOARD.md)"
+    printf 'Enter choice [1/2] (default: 1): '
+    read -r _source_sel
+    case "$_source_sel" in
+        2) CTF_SOURCE="official" ;;
+        *) CTF_SOURCE="writeups" ;;
+    esac
+fi
+[ -z "$CTF_SOURCE" ] && CTF_SOURCE="writeups"
+
+# Resolve --ctf-questions default now that BOTS dataset selection (and, if
+# prompted, question-source selection) is final: match whichever single
+# version was selected, else fall back to v1.
 if [ -z "$CTF_MODE" ]; then
     _n_sel=0
     [ "$SEL_V1" -eq 1 ] && _n_sel=$((_n_sel + 1))
     [ "$SEL_V2" -eq 1 ] && _n_sel=$((_n_sel + 1))
     [ "$SEL_V3" -eq 1 ] && _n_sel=$((_n_sel + 1))
+    _suffix=""
+    [ "$CTF_SOURCE" = "official" ] && _suffix="-official"
     if [ "$_n_sel" -eq 1 ]; then
         case "$(selected_list)" in
-            v1) CTF_MODE="v1" ;;
-            v2) CTF_MODE="v2" ;;
-            v3) CTF_MODE="v3" ;;
+            v1) CTF_MODE="v1${_suffix}" ;;
+            v2) CTF_MODE="v2${_suffix}" ;;
+            v3) CTF_MODE="v3${_suffix}" ;;
         esac
     else
-        CTF_MODE="v1"
-        echo "NOTE: multiple/no BOTS datasets selected — defaulting --ctf-questions to v1" \
+        CTF_MODE="v1${_suffix}"
+        echo "NOTE: multiple/no BOTS datasets selected — defaulting --ctf-questions to v1${_suffix}" \
             "(override with --ctf-questions v2|v3|... if that's not what you want)"
     fi
 fi

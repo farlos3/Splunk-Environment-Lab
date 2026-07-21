@@ -52,17 +52,52 @@ docker/ctf_seed_data/
   No hints (the source write-ups don't separate hints from the
   answer). A few multi-part answers got split into `-1`/`-2`
   sub-questions.
-- **`vN_official`** — empty. The real BOTS question/answer/hint files
-  are not public; request them via `bots@splunk.com` (see the
-  "Related Projects" note in the
-  [SA-ctf_scoreboard README](https://github.com/splunk/SA-ctf_scoreboard)).
-  Drop `ctf_questions.csv` / `ctf_answers.csv` / `ctf_hints.csv` into
-  the matching `vN_official/` folder, matching the writeups CSVs'
-  columns, then run `./setup.sh --vN --ctf-questions vN-official --force`.
+- **`vN_official`** — empty by default (just a `README.md` placeholder).
+  The real BOTS question/answer/hint files are Splunk's own proprietary
+  content, not published anywhere — you have to request them directly.
+  See "Requesting the official question set" below.
 
 Import is idempotent — it skips a collection that already has rows
 unless you pass `--force` (which also re-extracts/re-populates the BOTS
 volume; there's no CTF-only force flag yet).
+
+## Requesting the official question set
+
+The `vN_writeups` sets are enough to run the lab out of the box, but
+they're community-derived (from
+[chan2git/splunk-bots](https://github.com/chan2git/splunk-bots)) —
+`BasePoints` is *inferred*, not the real competition scoring, and hints
+are missing entirely. If you want the real thing, Splunk will send it
+to you for free on request:
+
+1. **Send an email to `bots@splunk.com`** (this address is called out
+   in the "Related Projects" section of the
+   [SA-ctf_scoreboard README](https://github.com/splunk/SA-ctf_scoreboard)
+   as the contact for BOTS questions/answers/hints access). Include:
+   - Which dataset(s) you want — BOTSv1 / v2 / v3.
+   - What you're using it for (e.g. "self-study" or "university
+     coursework" — this is a training lab, not a commercial product).
+   - That you already have the BOTS *data* (the `.tgz` this repo's
+     `setup.sh` downloads) and just need the CTF question/answer/hint
+     set to go with it.
+2. **Wait for a reply** — Splunk has historically sent back the
+   questions/answers/hints as a small CSV/spreadsheet bundle. Response
+   time isn't guaranteed since this is a manual, human-in-the-loop
+   process on their end, not an automated download.
+3. **Convert/save the three files** into `ctf_questions.csv`,
+   `ctf_answers.csv`, `ctf_hints.csv`, matching the exact columns
+   documented in `docker/ctf_seed_data/vN_official/README.md` (and the
+   `vN_writeups/` CSVs, which are real working examples of the schema).
+   Pay special attention to the `Number` (must be a plain integer) and
+   `StartTime`/`EndTime` (must be real epoch seconds, not blank) rules
+   spelled out there — the scoreboard controller crashes on either one.
+4. **Drop the three files directly into `docker/ctf_seed_data/vN_official/`**
+   (not a subfolder) — that's the exact path `setup.sh` reads from.
+   This folder is gitignored precisely so this proprietary content never
+   gets committed or pushed anywhere.
+5. **Run** `./setup.sh --vN --ctf-questions vN-official --force` to
+   (re)import it into the KV store — or just pick "official" at the
+   question-set prompt next time you run `./setup.sh` interactively.
 
 ## Requirements & auth model
 
