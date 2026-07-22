@@ -36,7 +36,7 @@ time / use `tstats` — 226M events.
 
 ### N6 — SSH brute force on the wire
 **🔗 parallel** · **ATT&CK:** T1110 · **Data:** `linux_secure`, `stream:tcp`
-**Method:** the syslog view (`linux_secure "Failed password" | rex …`) shows the external brute-forcers on `gacrux`; the wire view (`stream:tcp dest_port=22`) shows the connection volume. Separate this internet noise from the real intrusion.
+**Method:** the syslog view (`linux_secure "Failed password" | rex …`) shows the external brute-forcers — add `by host` and you'll find they hit **two** Linux servers (`eridanus`, `gacrux`), not one; the wire view (`stream:tcp dest_port=22`) shows the connection volume. Separate this internet noise from the real intrusion.
 
 ### N7 — The macOS backdoor on the wire
 **🔗 parallel** · **ATT&CK:** T1071 · **Data:** `suricata`, `stream:dns`

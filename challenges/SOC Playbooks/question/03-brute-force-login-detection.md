@@ -3,7 +3,7 @@
 🎯 **Purpose:** Detect and respond to brute force login attempts targeting user accounts and prevent unauthorized access.
 
 **Dataset:** BOTS v1 (`./setup.sh`) · **Case:** the Joomla admin login on `imreallynotbatman.com`.
-**Alternate case (BOTS v2):** internet-wide SSH brute force against `gacrux` — see the callouts at the end of each step.
+**Alternate case (BOTS v2):** internet-wide SSH brute force against the Linux servers (`eridanus` + `gacrux`) — see the callouts at the end of each step.
 
 ⏱ **Time picker:** `08/10/2016 00:00:00` → `08/12/2016 00:00:00` (v1). For the v2 SSH alternate: **All time** — it's dataset-wide background noise, not a single-day spike.
 
@@ -82,6 +82,6 @@
 
 **This case escalates.** The compromised login is the entry point for a much larger incident — pivot to **[Playbook 6 — Web Application Attack Detection](06-web-application-attack-detection.md)** to see what the attacker did once they were in.
 
-**Alternate case (v2):** SSH brute force against `gacrux` is **pure noise, not a success** — tens of thousands of failures from dozens of source IPs, but the one *successful* login on that host came from a completely different source IP than any of the brute-forcers. That's the opposite lesson from the v1 case: don't assume the loudest IP is the one that got in — always check Step 7 independently of Step 5.
+**Alternate case (v2):** the SSH brute force against the Linux servers is **pure noise, not a success** — tens of thousands of failures from dozens of source IPs across *two* hosts (`eridanus`, `gacrux`), but the only *successful* logins (on `gacrux`) came from a completely different source IP than any of the brute-forcers, and `eridanus` — the harder-hit of the two — yielded none at all. That's the opposite lesson from the v1 case: don't assume the loudest IP is the one that got in — always check Step 7 independently of Step 5, and confirm *which host* each IP is actually hitting before naming a victim.
 
 ➡️ [Solutions](../answer/03-brute-force-login-detection.md)

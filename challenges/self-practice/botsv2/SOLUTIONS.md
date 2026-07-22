@@ -458,7 +458,7 @@ index=botsv2 sourcetype=wineventlog:security EventCode=4688 earliest="08/24/2017
 index=botsv2 sourcetype=wineventlog:security (EventCode=4624 OR EventCode=4625) earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00"
 | stats count by EventCode ComputerName
 ```
-4625 = failed logon; a spike on one host flags a credential attack. Verified 08/24: `mercury.frothly.local` dominates both — **14,303** successful (4624) and **577** failed (4625) logons, an order of magnitude above every other host (`wrk-abungst` next-highest on 4625 with only 24). `mercury` is a server (likely running scheduled/service auth), so read this as heavy *service-account* logon churn, not a targeted brute force — cross-check against Q48's actual SSH brute force on `gacrux` for what a real credential attack's shape looks like.
+4625 = failed logon; a spike on one host flags a credential attack. Verified 08/24: `mercury.frothly.local` dominates both — **14,303** successful (4624) and **577** failed (4625) logons, an order of magnitude above every other host (`wrk-abungst` next-highest on 4625 with only 24). `mercury` is a server (likely running scheduled/service auth), so read this as heavy *service-account* logon churn, not a targeted brute force — cross-check against Q48's actual SSH brute force on `eridanus`/`gacrux` for what a real credential attack's shape looks like.
 
 ### Q43 Sysmon detail — the narrowing funnel
 Sysmon gives the `CommandLine`/hashes that 4688 lacks here (fields via the lab add-on). The whole point is that you can't get here by eyeballing a raw table — you narrow in steps:
@@ -657,15 +657,34 @@ Verified: `frothly.local\amber.turing` (173,975) and its short-domain-form dupli
 index=botsv2 sourcetype=linux_secure "Failed password" earliest=0
 | rex "from (?<src_ip>\d+\.\d+\.\d+\.\d+)" | stats count by src_ip | sort - count
 ```
-**Verified top brute-forcers:** `58.242.83.20` (**26,174** fails), `116.31.116.17` (19,755), `58.242.83.11` (19,329), `218.65.30.126` (10,851), `116.31.116.52` (5,113) — internet SSH brute force, all hitting `gacrux`.
+**Verified top brute-forcers:** `58.242.83.20` (**26,174** fails), `116.31.116.17` (19,755), `58.242.83.11` (19,329), `218.65.30.126` (10,851), `116.31.116.52` (5,113) — internet SSH brute force.
 
-**Step 3 — rank and compare.** `58.242.83.20` sits well above the rest — tens of thousands of failures from one IP is brute force, not a mistyped password.
-
-**Step 4 — sanity-check against a real login.**
+**Step 3 — rank, then add `host` before you name a target.** `58.242.83.20` sits well above the rest — tens of thousands of failures from one IP is brute force, not a mistyped password. But `stats count by src_ip` alone tells you *who is knocking*, not *what they're knocking on* — the `host` field never appears in that output. Add it:
 ```spl
-index=botsv2 sourcetype=linux_secure host=gacrux "Accepted password" earliest=0
+index=botsv2 sourcetype=linux_secure "Failed password" earliest=0
+| stats count by host | sort - count
 ```
-Verified: only **5** successful logins on `gacrux`, all `Accepted password for klager from 71.39.18.125` — a completely different IP from every brute-force source above. The brute force never actually landed; the real login is an unrelated legitimate user.
+Verified — **two** Linux hosts are under attack, not one: **`eridanus` (67,467)** and **`gacrux` (40,162)**. Cross-tabulating (`stats count by src_ip host`) shows they're not even the same attackers:
+
+| src_ip | host | count |
+|---|---|---|
+| `58.242.83.20` | **`eridanus`** | 26,174 |
+| `58.242.83.11` | **`eridanus`** | 19,329 |
+| `116.31.116.17` | `eridanus` | 11,944 |
+| `218.65.30.126` | **`gacrux`** | 10,851 |
+| `116.31.116.17` | `gacrux` | 7,811 |
+| `116.31.116.52` | **`gacrux`** | 5,113 |
+
+The single loudest source, `58.242.83.20`, is hammering **`eridanus`** — and `116.31.116.17` splits its traffic across *both* hosts, which is why its 19,755 total from Step 2 doesn't belong to either host alone. Reading Step 2's `src_ip` ranking and assuming one target is exactly the mistake this step exists to prevent.
+
+**Step 4 — sanity-check against a real login.** Check **both** hosts, not just the one you happened to look at:
+```spl
+index=botsv2 sourcetype=linux_secure "Accepted password" earliest=0
+| stats count by host
+```
+Verified: **`gacrux` = 5, `eridanus` = 0.** Reading the 5 raw events, all are `Accepted password for klager from 71.39.18.125` — a completely different IP from every brute-force source above.
+
+**Verdict.** The brute force never landed on either host. `eridanus` absorbed the heaviest attack (67k attempts, including the top two sources) and yielded **nothing**. `gacrux` had 5 successful logins, but from an unrelated legitimate user (`klager`) on an IP that appears nowhere in the attacker list — so it's not a brute-force success either. Loud ≠ successful: had you stopped at Step 2's ranking, you'd have reported the wrong target host *and* implied a compromise that never happened.
 
 ### Q49 — auditd / osquery
 `sourcetype=osquery_results` is JSON → use `spath`; `sourcetype=auditd` is `key=value`-ish → inspect `_raw` then `rex`. Deliverable = knowing which parser fits. Verified raw samples:
@@ -714,7 +733,7 @@ index=botsv2 host=wrk-bgist (sourcetype=*ysmon* OR sourcetype=wineventlog:securi
 | tstats count where index=botsv2 by host sourcetype
 ```
 
-**Step 2 — read sourcetype as a fingerprint.** Servers: `cassiopeia` (MySQL/DB), `venus`/`jupiter`/`mercury` (perfmon/pan). Workstations: `wrk-*` (Sysmon/winregistry). `gacrux` (Linux/SSH).
+**Step 2 — read sourcetype as a fingerprint.** Servers: `cassiopeia` (MySQL/DB), `venus`/`jupiter`/`mercury` (perfmon/pan). Workstations: `wrk-*` (Sysmon/winregistry). `gacrux` + `eridanus` (Linux/SSH — `linux_secure`/`auditd`; both are the SSH brute-force targets from Q48).
 
 **Step 3 — count the Macs, then cross-reference.** Exactly two hosts carry `osquery_results`: `maclory-air13` and `kutekitten`. Cross-referencing against Q46's Suricata drill-down: **`kutekitten`** is `10.0.4.2`, the same internal host that made the Quimitchin backdoor DNS lookup — the asset inventory and the IDS finding are pointing at the same machine.
 

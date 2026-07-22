@@ -66,7 +66,7 @@ fields out of it*. Crucial lesson up front:
 **Step 3 — search for markers, not rows.**
 - Attackers hiding a PowerShell payload lean on a few well-known tells: `-enc` (base64-encoded script), `FromBase64String`, `DownloadString` (fileless download-and-execute).
 - Search `CommandLine` for any of those (`OR` them together) — same "known-bad marker" idea as `match()` in Q40.
-- That alone should collapse the whole day, both hosts combined, down to single digits.
+- `table _time host CommandLine ParentImage`, `sort` by `_time` — not `stats count`. The whole point of this step is that the marker filter alone collapses the pile down to single digits, small enough to read every row by hand instead of aggregating it away. Look at the `host` column: how many distinct hosts actually survive the filter?
 
 **Step 4 — read the parent.**
 - What actually launched that PowerShell? Check `ParentImage`.
@@ -125,15 +125,15 @@ fields out of it*. Crucial lesson up front:
 **Step 4 — add the username, scoped to that destination.** Extend the same `rex` to also capture `src_user` (`frothly.local\<user>`), then `stats count by src_ip src_user` filtered to the one destination IP you noted in Step 3. Whose account shows up behind each of the internal sources funneling into it — and does that account make sense for what you already know that host's role to be from Stage 2?
 
 ### Q48 — Linux SSH brute force (`linux_secure`, syslog)
-**Find:** whether anyone is brute-forcing SSH — the top source IPs by failed-password count, and which host they're hammering.
+**Find:** whether anyone is brute-forcing SSH — the top source IPs by failed-password count, and which host(s) they're hammering.
 
 **Step 1 — isolate the signal, don't parse everything.** `sourcetype=linux_secure "Failed password"` — the literal string is the entire filter you need.
 
 **Step 2 — carve the source IP.** Raw lines look like `Failed password for root from 116.31.116.52 port 23301 ssh2` — `rex` the IP out from right after `from`. Grab the attempted username too, right before `from`.
 
-**Step 3 — rank and compare.** `stats count by src_ip`, `sort` descending. One external IP should sit an order of magnitude above the rest — tens of thousands of failures is brute force, not a mistyped password. Which internal host (`host` field) is catching all this noise?
+**Step 3 — rank, then find the target before you name it.** `stats count by src_ip`, `sort` descending. One external IP should sit an order of magnitude above the rest — tens of thousands of failures is brute force, not a mistyped password. ⚠️ But notice what that output *doesn't* contain: the `host` field. It tells you who's knocking, never what they're knocking on. Run `stats count by host` separately — how many Linux hosts are actually being hit? Then cross-tabulate (`stats count by src_ip host`): does the loudest IP from your ranking even belong to the host you assumed, and do any IPs split across more than one target?
 
-**Step 4 — sanity-check against a real login.** Search the same host for a *successful* login (`Accepted password`) around the same window — did the brute force ever actually land, or does it just bounce off?
+**Step 4 — sanity-check against a real login.** Search for a *successful* login (`Accepted password`) — **on every host Step 3 turned up, not just one.** `stats count by host` again. Did the brute force ever actually land anywhere? If a host does show successful logins, check the source IP on those events against your attacker list from Step 2 before calling it a compromise — a legitimate user logging in during a brute-force window is not the same thing as the brute force succeeding.
 
 ### Q49 — Linux auditd / osquery
 **Find:** the *right parser* for two more endpoint sources — which of `auditd` / `osquery_results` is JSON, and which is key=value-ish? (The deliverable is the parsing decision, not a count.)

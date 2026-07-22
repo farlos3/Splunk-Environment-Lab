@@ -24,11 +24,11 @@ v1's smash-and-grab, this is a slow, multi-surface intrusion. Verified anchors:
 | Persistence | `schtasks /Create /TN Updater /RU system` running an Empire payload stored in a **registry** key (`HKLM:\Software\Microsoft\Network debug`) |
 | Tooling dropped | `msiexec /i c:\temp\download\python.msi /qn` |
 | Workstation | `wrk-btun` = user **`FROTHLY\billy.tun`** (heavy `iexplore.exe` — browser activity) |
-| Linux | SSH **brute force** on `gacrux` from China IPs (`58.242.83.20` 26k, `116.31.116.17`, …); a **successful** `Accepted password for klager from 71.39.18.125` |
+| Linux | SSH **brute force** on **`eridanus` (67k) + `gacrux` (40k)** from China IPs (`58.242.83.20` 26k → `eridanus`, `218.65.30.126` → `gacrux`, `116.31.116.17` → both); the only **successful** login is `Accepted password for klager from 71.39.18.125` on `gacrux` (5 events, unrelated IP) — `eridanus` yielded zero |
 | macOS | **`ET TROJAN OSX Backdoor Quimitchin`** DNS lookup from `10.0.4.2` (the `kutekitten` Mac) → `10.0.1.100` |
 | Other IDS | port-135 scanning, TOR relay traffic, vulnerable Java |
 
-**Environment:** 23 hosts — servers `cassiopeia` (MySQL DB, ~61M events), `venus`, `jupiter`, `mercury`, `gacrux` (Linux); workstations `wrk-btun/ghoppy/aturing/klagerf/abungst/fmaltes/bgist`; Macs `maclory-air13` + `kutekitten` (`10.0.4.2`, the Quimitchin host).
+**Environment:** 23 hosts — servers `cassiopeia` (MySQL DB, ~61M events), `venus`, `jupiter`, `mercury`, `gacrux` + `eridanus` (Linux, both SSH-brute-forced); workstations `wrk-btun/ghoppy/aturing/klagerf/abungst/fmaltes/bgist`; Macs `maclory-air13` + `kutekitten` (`10.0.4.2`, the Quimitchin host).
 
 ---
 

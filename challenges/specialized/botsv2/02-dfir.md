@@ -38,7 +38,7 @@ Every step **builds on** the last. Scope raw searches to the active window
 **🔗 Builds on D2.** **Deliverable:** how the actor moved host-to-host. The `WmiPrvSE.exe` parent (D2) = WMI lateral execution (T1047). Look for the credential source (which account ran the WMI) and other WMI-spawned processes across hosts.
 
 ### D8 — Multi-OS scope
-**🔗 Builds on D1.** **Deliverable:** the non-Windows footholds. Linux: separate the SSH brute-force noise from the *successful* `klager` login (`gacrux`). macOS: the Quimitchin backdoor on **`kutekitten`** (`10.0.4.2`) — IDS/DNS flag it on the wire and `osquery_results` on that host confirms the malware file/hash. State confidence on whether each belongs to the campaign.
+**🔗 Builds on D1.** **Deliverable:** the non-Windows footholds. Linux: separate the SSH brute-force noise (two hosts — `eridanus` 67k, `gacrux` 40k) from the *successful* `klager` login (`gacrux` only; `eridanus` had none). macOS: the Quimitchin backdoor on **`kutekitten`** (`10.0.4.2`) — IDS/DNS flag it on the wire and `osquery_results` on that host confirms the malware file/hash. State confidence on whether each belongs to the campaign.
 
 ### D9 — Account & credential impact
 **🔗 Builds on D7.** **Deliverable:** which accounts were used/abused (`FROTHLY\billy.tun`, `amber.turing`, `klager`, SYSTEM via the task). Any privileged accounts? What's the credential-exposure blast radius?

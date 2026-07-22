@@ -167,7 +167,7 @@ if ! any_selected; then
         echo "  v2   ($SIZE_V2)  APT / advanced-threat scenario"
         echo "  v3   ($SIZE_V3) AWS + O365 cloud / identity"
         echo "  all  (all three)"
-        printf 'Enter choice(s) [e.g. v1 , "v1 v3", or all] (default: v1): '
+        printf 'Enter choice(s) (default: v1): '
         read -r _sel
         [ -z "$_sel" ] && _sel=v1
         case "$_sel" in

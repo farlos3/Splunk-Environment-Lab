@@ -60,7 +60,7 @@ practice separating internet background noise from the real intrusion.*
 ### B1 — Triage the Linux SSH noise
 **ATT&CK:** T1110 · **Data:** `linux_secure`
 **Hypothesis:** the Linux hosts are being brute-forced from the internet.
-**Method:** `sourcetype=linux_secure "Failed password" | rex "from (?<src_ip>\d+\.\d+\.\d+\.\d+)" | stats count by src_ip | sort - count`. Huge counts from a handful of (Chinese) IPs hitting `gacrux`. This is *background radiation* — loud, distributed, denied. Note it, don't over-focus.
+**Method:** `sourcetype=linux_secure "Failed password" | rex "from (?<src_ip>\d+\.\d+\.\d+\.\d+)" | stats count by src_ip | sort - count`. Huge counts from a handful of (Chinese) IPs. Re-run `by host` too — the attack lands on **two** Linux hosts (`eridanus`, `gacrux`), and the `src_ip` view alone won't show you that. This is *background radiation* — loud, distributed, denied. Note it, don't over-focus.
 **Carry forward:** the brute-force IPs (to *exclude* in B2).
 
 ### B2 — Find the actual successful login

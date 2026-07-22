@@ -56,14 +56,16 @@ index=botsv2 sourcetype=*ysmon* EventCode=1 CommandLine="*msiexec*c:\\temp*"
 index=botsv2 sourcetype=linux_secure "Failed password"
 | rex "from (?<src_ip>\d+\.\d+\.\d+\.\d+)" | stats count by src_ip | sort - count
 ```
-Top: `58.242.83.20` (26,174), `116.31.116.17` (19,755), `58.242.83.11` (19,329), `218.65.30.126`, `116.31.116.52` — internet brute force on `gacrux`. Loud background noise.
+Top: `58.242.83.20` (26,174), `116.31.116.17` (19,755), `58.242.83.11` (19,329), `218.65.30.126` (10,851), `116.31.116.52` (5,113) — internet brute force. Loud background noise.
+
+⚠️ This `by src_ip` ranking hides the target. Add `by host`: **two** Linux hosts are hit — **`eridanus` (67,467)** and **`gacrux` (40,162)** — and they're largely different attackers. `58.242.83.20` and `58.242.83.11` (the top two) hammer **`eridanus`**; `218.65.30.126`/`116.31.116.52` hit `gacrux`; `116.31.116.17` splits across both (11,944 + 7,811). Don't report a single target host off the `src_ip` ranking alone.
 
 ### B2 ✅ Successful login
 ```spl
 index=botsv2 sourcetype=linux_secure "Accepted password"
 | rex "Accepted password for (?<user>\S+) from (?<src_ip>\S+)" | stats count by src_ip user host
 ```
-`Accepted password for klager from 71.39.18.125` on `gacrux` — a **different** source than the brute-forcers. Judgment call: likely the employee `klager` (verify source/timing) — the lesson is separating the real login from the brute-force noise, not assuming the loud IPs won.
+`Accepted password for klager from 71.39.18.125` on `gacrux` (5 events) — a **different** source than the brute-forcers. Note `eridanus`, despite absorbing the *heavier* attack (67k attempts), has **zero** successful logins — the host that was hit hardest yielded nothing at all. Judgment call: likely the employee `klager` (verify source/timing) — the lesson is separating the real login from the brute-force noise, not assuming the loud IPs won.
 
 ### B3 ✅ macOS backdoor
 ```spl
@@ -108,7 +110,7 @@ index=botsv2 sourcetype=suricata "Quimitchin" | stats count by src_ip dest_ip
 - **N3 ✅** internal beacon hosts: `10.0.2.107`, `10.0.2.109` (first, Aug 15), `10.0.1.100`, `10.0.1.101`.
 - **N4 ✅** `stream:http dest_ip="45.77.65.211"` ≈ empty (TLS) → for HTTPS C2 rely on flow metadata + IDS + endpoint, not payload. (Only stray cleartext: one `/microsoftuserfeedbackservice` hit.)
 - **N5 ✅** scanning — `suricata "Port 135"` → `10.0.1.1 → 10.0.1.100` (5,330, "ET SCAN Unusual Port 135"). Categories: `Misc activity` (5,344), `A Network Trojan was detected` (5 = Quimitchin), `Misc Attack` (7).
-- **N6 ✅** SSH brute — `linux_secure "Failed password"` external China IPs (`58.242.83.20` 26k …) on `gacrux`; wire view `stream:tcp dest_port=22`.
+- **N6 ✅** SSH brute — `linux_secure "Failed password"` external China IPs (`58.242.83.20` 26k …) on **`eridanus` (67k) + `gacrux` (40k)**; wire view `stream:tcp dest_port=22`.
 - **N7 ✅** macOS — `suricata "Quimitchin"` (cat *A Network Trojan*) from `10.0.4.2`; pivot `stream:dns src_ip=10.0.4.2`.
 - **N8 ✅** capstone — `(pan:traffic OR suricata OR stream:tcp) 45.77.65.211 | stats count by sourcetype`: one indicator across every network view = report-grade. Exfil = over TLS C2, **asymmetric (received > sent) → tasking/signalling, not bulk theft**; a naive positional `rex` on PAN byte columns is unreliable (returns `sent=0`) — don't quote byte numbers without the proper PAN field parser.
 
@@ -146,7 +148,7 @@ index=botsv2 sourcetype=linux_secure "Failed password"
 | rex "from (?<src_ip>\d+\.\d+\.\d+\.\d+)" | bin _time span=5m
 | stats count by _time src_ip | where count > 20
 ```
-**Verified:** **1,487** 5-min windows across **31** source IPs exceed the threshold — a large brute-force campaign on `gacrux`. **Escalate:** join with `"Accepted password"` from the same source to promote *brute-force-then-success*; the `klager` success came from a **different** IP, so this rule correctly treats it separately.
+**Verified:** **1,487** 5-min windows across **31** source IPs exceed the threshold — a large brute-force campaign against both `eridanus` and `gacrux`. **Escalate:** join with `"Accepted password"` from the same source to promote *brute-force-then-success*; the `klager` success came from a **different** IP, so this rule correctly treats it separately.
 
 ### DE6 ✅ Network trojan / macOS (T1071)
 ```spl

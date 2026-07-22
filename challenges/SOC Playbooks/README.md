@@ -19,7 +19,7 @@ can run right now — nothing here is a hypothetical.
 |---|---|---|---|---|---|
 | 1 | [Phishing Email Investigation](question/01-phishing-email-investigation.md) | **v2** | Taedonggang's password-protected `invoice.zip` lure to Frothly | — | [→](answer/01-phishing-email-investigation.md) |
 | 2 | [Malware Alert Investigation](question/02-malware-alert-investigation.md) | **v1** | Cerber ransomware on `we8105desk` | v2: PowerShell Empire stager | [→](answer/02-malware-alert-investigation.md) |
-| 3 | [Brute Force Login Detection](question/03-brute-force-login-detection.md) | **v1** | Joomla admin brute force (`23.22.63.114`) | v2: SSH brute force on `gacrux` | [→](answer/03-brute-force-login-detection.md) |
+| 3 | [Brute Force Login Detection](question/03-brute-force-login-detection.md) | **v1** | Joomla admin brute force (`23.22.63.114`) | v2: SSH brute force on `eridanus` + `gacrux` | [→](answer/03-brute-force-login-detection.md) |
 | 4 | [Privilege Escalation Detection](question/04-privilege-escalation-detection.md) | **v2** | Backdoor account `svcvnc` added to local Administrators on 4 hosts, then an audit-log clear | — | [→](answer/04-privilege-escalation-detection.md) |
 | 5 | [Data Exfiltration Detection](question/05-data-exfiltration-detection.md) | **v2** | Amber Turing emails a patent document to a competitor (insider threat) | — | [→](answer/05-data-exfiltration-detection.md) |
 | 6 | [Web Application Attack Detection](question/06-web-application-attack-detection.md) | **v1** | SQLi + scanning against `imreallynotbatman.com` | v2: SQLi + XSS against `brewertalk.com` | [→](answer/06-web-application-attack-detection.md) |

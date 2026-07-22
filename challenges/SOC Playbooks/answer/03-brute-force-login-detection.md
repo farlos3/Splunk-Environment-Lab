@@ -54,7 +54,7 @@ index=botsv2 sourcetype=linux_secure "Failed password"
 | stats count by src_ip
 | sort - count
 ```
-Top offender: **`58.242.83.20`**, **26,174** failures, targeting `gacrux`. `iplocation` → **China**.
+Top offender: **`58.242.83.20`**, **26,174** failures, targeting **`eridanus`** (not `gacrux` — `stats count by src_ip` alone doesn't show the target; add `by host` and you'll see two victims, `eridanus` 67,467 and `gacrux` 40,162, hit by largely different source IPs). `iplocation` → **China**.
 ```spl
 index=botsv2 sourcetype=linux_secure "Accepted password"
 | rex "Accepted password for (?<user>\S+) from (?<src_ip>\S+)"
