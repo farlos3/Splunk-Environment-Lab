@@ -619,7 +619,11 @@ Verified: `src_ip=10.0.4.2 → dest_ip=10.0.1.100`, 4 events — 5,344 alerts of
 
 ### Q47 Palo Alto (CSV, needs rex)
 
-**Step 1 — read the raw shape.** `sourcetype=pan:traffic | head 1`:
+**Step 1 — read the raw shape.**
+```spl
+sourcetype=pan:traffic | head 1
+```
+Verified `_raw`:
 ```
 Aug 31 15:59:37 10.0.1.1  1,2017/08/31 15:59:36,009401015183,TRAFFIC,end,1,2017/08/31 15:59:36,10.0.2.101,10.0.1.100,0.0.0.0,0.0.0.0,Client-Server,frothly.local\amber.turing,,dns,vsys1,Inside,Inside,ethernet1/3,ethernet1/2,Jupiter,2017/08/31 15:59:36,63207,1,54896,53,0,0,0x19,udp,allow,531,395,136,6,2017/08/31 15:58:58,9,any,0,3349659,0x0,10.0.0.0-10.255.255.255,10.0.0.0-10.255.255.255,0,5,1
 ```
