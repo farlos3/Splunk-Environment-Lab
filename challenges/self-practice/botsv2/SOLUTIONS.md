@@ -664,7 +664,15 @@ index=botsv2 sourcetype=linux_secure "Failed password" earliest=0
 index=botsv2 sourcetype=linux_secure "Failed password" earliest=0
 | stats count by host | sort - count
 ```
-Verified — **two** Linux hosts are under attack, not one: **`eridanus` (67,467)** and **`gacrux` (40,162)**. Cross-tabulating (`stats count by src_ip host`) shows they're not even the same attackers:
+**No `rex` on this one** — `host` is a Splunk default metadata field, set at index time and always present on every event. Only `src_ip` needs carving out of the message text, because nothing in this lab extracts it for you (see Q47's note on why).
+
+Verified — **two** Linux hosts are under attack, not one: **`eridanus` (67,467)** and **`gacrux` (40,162)**. Now cross-tabulate the two together — this one **does** need the `rex` back, since `src_ip` doesn't exist until you create it:
+```spl
+index=botsv2 sourcetype=linux_secure "Failed password" earliest=0
+| rex "from (?<src_ip>\d+\.\d+\.\d+\.\d+)"
+| stats count by src_ip host | sort - count
+```
+They're not even the same attackers:
 
 | src_ip | host | count |
 |---|---|---|
