@@ -114,13 +114,15 @@ fields out of it*. Crucial lesson up front:
 ### Q47 — Palo Alto firewall (`pan:traffic`, CSV)
 **Find:** who's talking to whom through the firewall — but `pan:traffic` ships with **no extracted fields**, so first you have to carve `src_ip`/`dest_ip`/`src_user` out of the raw CSV yourself.
 
+*Why no fields?* Field extraction isn't something Splunk figures out on its own — it comes from either Splunk core's built-in knowledge of a well-known format (like `access_combined`), a sourcetype that's self-describing JSON (like `stream:*`/`suricata`, auto-parsed with zero schema needed), or a vendor Technology Add-on that ships `props.conf`/`transforms.conf` mapping specific CSV column positions to field names. PAN-OS's CSV has no field names in the line itself — only the Palo Alto Add-on knows column 8 means `src_ip`. This lab ships no vendor TAs (see the note at the top of this page), so that mapping never happens, and `pan:traffic` stays raw text.
+
 **Step 1 — read one raw event before writing any SPL.** `sourcetype=pan:traffic | head 1`. The log is comma-separated: `… ,TRAFFIC,end,…,<src_ip>,<dest_ip>,…,<src_user>,…,<app>,…`. Count positions from the literal `TRAFFIC` marker onward — that anchor doesn't move, even though earlier fields sometimes do.
 
 **Step 2 — carve the fields positionally.** `rex` off that `TRAFFIC,...` anchor to pull `src_ip` and `dest_ip` as named groups.
 
-**Step 3 — count the pairs, then read before concluding.** `stats count by src_ip dest_ip`, `sort` descending. Some of what dominates will be unremarkable (DNS to a public resolver, telemetry to a cloud endpoint) — the more interesting rows are *internal-to-internal* pairs converging on one host. Does that host match anything you already know its role to be from Stage 2?
+**Step 3 — count the pairs, then look for convergence, not just volume.** `stats count by src_ip dest_ip`, `sort` descending. The top rows will be unremarkable single-purpose flows (DNS to a public resolver, telemetry to a cloud endpoint) — skip past those. Below them, look for the same pattern Q43 taught you to spot: not one big row, but *several different* internal source IPs all landing on the *same one* destination IP. That shared destination is the concrete thing to carry into Step 4 — write it down.
 
-**Step 4 — add the username.** Extend the same `rex` to also capture `src_user` (`frothly.local\<user>`), then re-run scoped to one of the internal pairs from Step 3. Whose account is behind it, and does that account make sense for that host?
+**Step 4 — add the username, scoped to that destination.** Extend the same `rex` to also capture `src_user` (`frothly.local\<user>`), then `stats count by src_ip src_user` filtered to the one destination IP you noted in Step 3. Whose account shows up behind each of the internal sources funneling into it — and does that account make sense for what you already know that host's role to be from Stage 2?
 
 ### Q48 — Linux SSH brute force (`linux_secure`, syslog)
 **Find:** whether anyone is brute-forcing SSH — the top source IPs by failed-password count, and which host they're hammering.
