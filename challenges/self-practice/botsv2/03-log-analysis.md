@@ -4,10 +4,14 @@ Now you read the actual security logs. v2 has **104 sourcetypes** across many
 technologies — the skill is knowing *what each one tells you* and *how to get
 fields out of it*. Crucial lesson up front:
 
-> 🔑 **Not every sourcetype is field-extracted.** This lab ships no vendor
-> TAs, so some sources give you clean fields and some are raw text you must
-> `rex`. **Always check first:** `… sourcetype=X | head 1` and look at
-> `_raw` vs. the field sidebar. Verified state below.
+> 🔑 **Not every sourcetype is field-extracted.** Fields come from three
+> places: Splunk's *automatic* extraction (any JSON, and any `key=value`
+> text — free, no config), a vendor TA, or your own `rex`. This lab ships
+> **no vendor TAs**, so anything that isn't self-describing — positional
+> CSV like `pan:traffic`, prose syslog like `linux_secure` — is raw text
+> you must carve yourself. **Always check first:** `… sourcetype=X | head 1`
+> and compare `_raw` against the field sidebar before writing a parser —
+> you'll often find the work already done (see Q49). Verified state below.
 
 | Sourcetype | Format | How you read it |
 |---|---|---|
@@ -19,9 +23,9 @@ fields out of it*. Crucial lesson up front:
 | `winregistry` | key=value | `key_path`, `registry_type`, `data` |
 | `symantec:ep:*` | CSV-ish | comma fields; inspect `_raw` |
 | `pan:traffic` | **CSV** | **`rex`/positional** — comma-separated |
-| `linux_secure` | syslog text | **`rex`** the message |
-| `auditd` | key=value-ish (syslog-wrapped) | **`rex`** the message |
-| `osquery_results` | JSON | **`spath`** |
+| `linux_secure` | syslog prose | **`rex`** the message — no key names to auto-extract |
+| `auditd` | key=value | auto-KV gives `type`/`acct`/`addr`/`exe`/`res`/… free; `rex` only for sub-structure inside a value |
+| `osquery_results` | JSON | auto-parsed to dotted names (`columns.path`) — no `spath` needed |
 | `mysql:*` (`mysql:server:stats`, `mysql:transaction:details`) | key="value" (quoted) | fields already named in `_raw` — `hostname`, `database_name`, `Duration`, `SQL_TEXT` carries the query text directly |
 
 ⏱ **Time picker — Stage 3** (depends on the source you're reading)
@@ -138,11 +142,11 @@ fields out of it*. Crucial lesson up front:
 ### Q49 — Linux auditd / osquery
 **Find:** the *right parser* for two more endpoint sources — which of `auditd` / `osquery_results` is JSON, and which is key=value-ish? (The deliverable is the parsing decision, not a count.)
 
-**Step 1 — look before you parse.** `sourcetype=auditd | head 20` and `sourcetype=osquery_results | head 5`. Read `_raw` for both before writing a single `rex` or `spath`.
+**Step 1 — look before you parse.** `sourcetype=auditd | head 20` and `sourcetype=osquery_results | head 5`. Read `_raw` for both before writing a single `rex` or `spath`. One is nested JSON; the other is space-separated `key=value` with a quoted sub-message (`msg='...'`).
 
-**Step 2 — name the shape.** `osquery_results` is one (nested) JSON object per event — `spath` territory, which gives you dotted field names like `columns.path`, not flat ones. `auditd` is space-separated `key=value` pairs with an embedded quoted sub-message (`msg='...'`) — `rex` territory, `spath` won't help here.
+**Step 2 — check the field sidebar before you write a parser.** The obvious call from Step 1 is "JSON → `spath`, key=value → `rex`." Don't take it on faith — run `| head 1 | fields - _* | table *` on each and see what Splunk *already* gave you. How many of the fields you were about to extract by hand are sitting there for free?
 
-**Step 3 — prove it on real content.** Pull one `auditd` event that looks like SSH activity — it's the *same* kind of noise Q48 found, just surfaced through the Linux audit subsystem instead of syslog. Correctly identifying the parser is what lets you cross-reference one real event across two different sourcetypes.
+**Step 3 — draw the real conclusion.** Given what Step 2 showed, when does `rex` actually earn its keep on these two sourcetypes — and why is `pan:traffic` back in Q47 a genuinely different case? (Think about what automatic extraction needs in order to find a field at all, and what positional CSV doesn't have.) The deliverable is that reasoning, not a count.
 
 ### Q50 — MySQL activity
 **Find:** which host is the database server, and what the on-wire SQL looks like.

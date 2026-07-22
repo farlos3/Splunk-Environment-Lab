@@ -695,12 +695,32 @@ Verified: **`gacrux` = 5, `eridanus` = 0.** Reading the 5 raw events, all are `A
 **Verdict.** The brute force never landed on either host. `eridanus` absorbed the heaviest attack (67k attempts, including the top two sources) and yielded **nothing**. `gacrux` had 5 successful logins, but from an unrelated legitimate user (`klager`) on an IP that appears nowhere in the attacker list — so it's not a brute-force success either. Loud ≠ successful: had you stopped at Step 2's ranking, you'd have reported the wrong target host *and* implied a compromise that never happened.
 
 ### Q49 — auditd / osquery
-`sourcetype=osquery_results` is JSON → use `spath`; `sourcetype=auditd` is `key=value`-ish → inspect `_raw` then `rex`. Deliverable = knowing which parser fits. Verified raw samples:
+
+**Step 1 — look before you parse.**
+```spl
+index=botsv2 sourcetype=auditd earliest=0 | head 20
+index=botsv2 sourcetype=osquery_results earliest=0 | head 5
+```
+Verified raw samples:
 ```
 auditd:          type=USER_AUTH msg=audit(08/31/2017 22:59:50.870:756395) : user pid=32288 uid=root auid=unset ses=unset subj=system_u:system_r:sshd_t:s0-s0:c0.c1023 msg='op=password acct=(unknown) exe=/usr/sbin/sshd hostname=? addr=58.56.184.242 terminal=ssh res=failed'
 osquery_results:  {"name":"pack_incident-response_listening_ports","hostIdentifier":"MACLORY-AIR13S.local","calendarTime":"Thu Aug 31 22:55:48 2017 UTC","unixTime":"1504220148","decorations":{"host_uuid":"564D4B96-D1CC…
 ```
-`auditd` confirms itself as space-separated `key=value` pairs (with an embedded quoted `msg='...'` sub-message) — `rex` territory, e.g. this line is the *same kind* of SSH brute-force noise as Q48 (a different source IP, `58.56.184.242`, but the same `res=failed` pattern), just surfaced through Linux's audit subsystem instead of `linux_secure`. `osquery_results` confirms itself as one JSON object per line — `spath` territory; note the JSON is nested (`decorations.host_uuid`), so `spath` gives you dotted field names like `decorations.host_uuid`, not flat ones.
+`auditd` is space-separated `key=value` pairs (with an embedded quoted `msg='...'` sub-message). `osquery_results` is one nested JSON object per line.
+
+**Step 2 — check what's already extracted before writing any parser.** The naive read is "`auditd` → `rex`, `osquery_results` → `spath`." Test it instead of assuming:
+```spl
+index=botsv2 sourcetype=auditd earliest=0 | head 1 | fields - _* | table *
+```
+Verified — **`auditd` needs no `rex` at all** for its key=value pairs. Splunk's automatic KV extraction already produced `type=USER_AUTH`, `acct=(unknown)`, `addr=58.56.184.242`, `exe=/usr/sbin/sshd`, `res=failed`, `op=password`, `pid`, `uid`, `auid`, `ses`, `subj`, `terminal`, `hostname` — including the pairs *inside* the quoted `msg='...'` sub-message. And there is **no `[auditd]` props.conf stanza anywhere on this instance** (verified by grepping every app's `props.conf`) — this is pure Splunk core behavior, not a lab add-on.
+
+Same check on `osquery_results` returns `columns.path`, `columns.pid`, `columns.port`, `decorations.username`, `decorations.host_uuid`, `name`, `action`, `hostIdentifier`, … — **no `spath` needed either**; Splunk auto-detects JSON and flattens it to dotted field names. (The dataset app *does* ship an `[osquery_results]` stanza, but it only adds CIM `FIELDALIAS`/`EVAL` conveniences — `columns.path as process`, a combined `file_hash` — on top of fields JSON auto-parsing already created.)
+
+**Step 3 — so what actually needs manual parsing?** The deliverable is the parsing *decision*, and the verified answer is: for everyday fields on these two sourcetypes, **neither** — automatic extraction covers both a JSON format and a key=value format for free. `rex` only earns its keep on sub-structure *inside* a single value that auto-KV can't see into — e.g. pulling the audit serial `756395` out of `msg=audit(08/31/2017 22:59:50.870:756395)`.
+
+That's the real lesson, and it's the mirror image of Q47: `pan:traffic` genuinely needs `rex` because positional CSV carries **no key names and no JSON structure** — nothing for automatic extraction to latch onto. Check the field sidebar first; only reach for `rex`/`spath` when it's actually empty.
+
+*(Content note: the `auditd` line above is the same kind of SSH brute-force noise as Q48 — a different source IP, `58.56.184.242`, but the same `res=failed` pattern — surfaced through Linux's audit subsystem instead of `linux_secure`.)*
 
 ### Q50 MySQL
 
