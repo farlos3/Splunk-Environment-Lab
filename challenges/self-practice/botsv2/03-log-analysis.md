@@ -9,18 +9,20 @@ fields out of it*. Crucial lesson up front:
 > `rex`. **Always check first:** `… sourcetype=X | head 1` and look at
 > `_raw` vs. the field sidebar. Verified state below.
 
-| Sourcetype | Format | Fields extracted? | How you read it |
-|---|---|---|---|
-| `access_combined` | Apache combined | ✅ yes | `clientip method uri status bytes useragent` |
-| `wineventlog:security` | key=value | ✅ yes | `EventCode`, `ComputerName`, `Message` (e.g. 4688/4624/4625) |
-| `xmlwineventlog:…sysmon…` | XML | ✅ via lab add-on | `EventCode`, `Image`, `CommandLine`, … |
-| `stream:*` (dns/http/smb/smtp/ftp/tcp) | JSON | ✅ yes | JSON keys, e.g. `query{}`, `src_ip`, `dest_ip`, `filename` |
-| `suricata` | JSON | ✅ yes | `alert.signature`, `alert.category`, `src_ip` |
-| `winregistry` | key=value | ✅ yes | `key_path`, `registry_type`, `data` |
-| `symantec:ep:*` | CSV-ish | ✅ mostly | comma fields; inspect `_raw` |
-| `pan:traffic` | **CSV** | ❌ no (no PAN TA) | **`rex`/positional** — comma-separated |
-| `linux_secure`, `auditd` | syslog text | ❌ no | **`rex`** the message |
-| `mysql:*`, `osquery_results` | JSON/mixed | ⚠️ JSON → `spath` | `spath`, or read `_raw` then `rex` |
+| Sourcetype | Format | How you read it |
+|---|---|---|
+| `access_combined` | Apache combined | `clientip method uri status bytes useragent` |
+| `wineventlog:security` | key=value | `EventCode`, `ComputerName`, `Message` (e.g. 4688/4624/4625) |
+| `xmlwineventlog:…sysmon…` | XML | `EventCode`, `Image`, `CommandLine`, … |
+| `stream:*` (dns/http/smb/smtp/ftp/tcp) | JSON | JSON keys, e.g. `query{}`, `src_ip`, `dest_ip`, `filename` |
+| `suricata` | JSON | `alert.signature`, `alert.category`, `src_ip` |
+| `winregistry` | key=value | `key_path`, `registry_type`, `data` |
+| `symantec:ep:*` | CSV-ish | comma fields; inspect `_raw` |
+| `pan:traffic` | **CSV** | **`rex`/positional** — comma-separated |
+| `linux_secure` | syslog text | **`rex`** the message |
+| `auditd` | key=value-ish (syslog-wrapped) | **`rex`** the message |
+| `osquery_results` | JSON | **`spath`** |
+| `mysql:*` (`mysql:server:stats`, `mysql:transaction:details`) | key="value" (quoted) | fields already named in `_raw` — `hostname`, `database_name`, `Duration`, `SQL_TEXT` carries the query text directly |
 
 ⏱ **Time picker — Stage 3** (depends on the source you're reading)
 
@@ -125,7 +127,7 @@ Raw syslog like `Failed password for root from 116.31.116.52 port 23301 ssh2`.
 
 ### Q50 — MySQL activity
 **Find:** which host is the database server, and what the on-wire SQL looks like.
-**Hint:** For "which host is the DB server?", `tstats count by host` on `mysql:*` — one host dominates the whole index. Read `stream:mysql | head` to see the on-wire SQL (in a `query`-style field).
+**Hint:** For "which host is the DB server?", `tstats count by host` on `mysql:*` — one host dominates the whole index. For the on-wire SQL itself, read `sourcetype=mysql:transaction:details | head` — the query text is right there in `SQL_TEXT` (verified: `stream:mysql` is connection/flow metadata only — bytes, ports, timing — it carries no query field at all, despite what you might expect from the other `stream:*` sourcetypes).
 
 ## Putting sources together
 
