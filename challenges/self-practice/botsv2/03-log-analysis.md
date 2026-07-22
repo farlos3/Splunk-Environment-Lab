@@ -228,13 +228,13 @@ fields out of it*. Crucial lesson up front:
 ### Q59 — macOS endpoint (`osquery_results`) — confirm the Mac malware
 **Find:** the backdoor file on the Mac and its hash. The Mac (`kutekitten`) has no real-time EDR, but `osquery_results` snapshots its files — enough to confirm the malware on-host.
 
-**Step 1 — scope tight.** `sourcetype=osquery_results host=kutekitten`, further filtered to the home directory of the user you already know owns this Mac from earlier in Stage 3.
+**Step 1 — scope tight, and pick the right query pack.** `sourcetype=osquery_results host=kutekitten` spans over a dozen different osquery query packs (`stats count by name` shows the split) — most are process/hardware noise with no hash info at all. The one that actually carries file hashes is `name=file_events`; don't assume every pack has the same fields.
 
-**Step 2 — count before reading.** How many file records come back? It should be small enough to actually read through, not thousands.
+**Step 2 — filter to rows that actually have a hash.** Not every `file_events` row is hashed — some are just permission/attribute-change duplicates of the same file with blank hash fields. Filter to the rows where the hash fields are populated.
 
-**Step 3 — pull the suspicious one.** Look at `columns.path` for anything that doesn't belong in a normal user folder, then grab its `columns.sha256`. That hash is what you'd check against a malware database to identify what it actually is.
+**Step 3 — read what got flagged.** A small number of events remain, all pointing at the same file sitting in the Mac owner's `Downloads` folder. Read the filename itself: does it look like a normal download, or a social-engineering lure (no file extension, executable permissions, an HR-themed name designed to get opened)?
 
-**Step 4 — connect it back to Stage 3.** IDS *alerted* you to suspicious traffic from this host earlier (Q46); osquery *confirms* what's actually sitting on disk. Same host, two independent proofs — that pairing is what makes a finding report-grade instead of a hunch.
+**Step 4 — pull the hash and connect it back.** Grab the MD5/SHA1/SHA256 from that event and check it externally. IDS *alerted* you to suspicious traffic from this host earlier (Q46); osquery *confirms* what's actually sitting on disk, permissions and all. Same host, two independent proofs — that pairing is what makes a finding report-grade instead of a hunch.
 
 ### Q60 — One indicator, every view (Stage-4 warm-up)
 **Find:** how many *different* sourcetypes saw the C2 IP `45.77.65.211` — proof of how many independent angles you have on one indicator.

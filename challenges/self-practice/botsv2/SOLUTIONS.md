@@ -618,21 +618,50 @@ index=botsv2 sourcetype=suricata "alert.signature"="*Quimitchin*" earliest=0
 Verified: `src_ip=10.0.4.2 → dest_ip=10.0.1.100`, 4 events — 5,344 alerts of scanning/TOR/policy noise narrowed down to one internal host making DNS lookups tied to a known macOS backdoor. That host is the concrete lead Stage 4's threat-hunting track picks up.
 
 ### Q47 Palo Alto (CSV, needs rex)
-No auto-fields. Read `_raw` (comma-separated), then extract. Example raw:
-`… ,TRAFFIC,end,1,…,10.0.2.101,10.0.1.100,…,frothly.local\amber.turing,,dns,…`
+
+**Step 1 — read the raw shape.** `sourcetype=pan:traffic | head 1`:
+```
+… ,TRAFFIC,end,1,…,10.0.2.101,10.0.1.100,0.0.0.0,0.0.0.0,Client-Server,frothly.local\amber.turing,,dns,…
+```
+No auto-extracted fields at all — comma-separated, anchor on the literal `TRAFFIC` marker since the fields before it aren't fixed-width.
+
+**Step 2 — carve `src_ip`/`dest_ip` positionally.**
 ```spl
 index=botsv2 sourcetype=pan:traffic
 | rex "TRAFFIC,\w+,\d+,[^,]+,(?<src_ip>[^,]+),(?<dest_ip>[^,]+)"
-| stats count by src_ip dest_ip
+| stats count by src_ip dest_ip | sort - count
 ```
-Domain is `frothly.local`; users appear as `frothly.local\<user>` (e.g. `amber.turing`). Verified top pairs (whole dataset): `10.0.1.100 → 8.8.8.8` (280,239 — DNS to Google), `10.0.1.200 → 52.40.10.231` (248,555 — an AWS-hosted endpoint), `10.0.2.101 → 10.0.1.100` (181,699), `10.0.2.107 → 10.0.1.100` (51,602), `10.0.2.109 → 10.0.1.100` (47,935) — the last three are internal-to-internal flows converging on `10.0.1.100`, worth a second look given that host's role elsewhere in the dataset.
+Verified top pairs (whole dataset): `10.0.1.100 → 8.8.8.8` (280,239 — DNS to Google), `10.0.1.200 → 52.40.10.231` (248,555 — an AWS-hosted endpoint), `10.0.2.101 → 10.0.1.100` (181,699), `10.0.2.107 → 10.0.1.100` (51,602), `10.0.2.109 → 10.0.1.100` (47,935) — the last three are internal-to-internal flows converging on `10.0.1.100`, worth a second look given that host's role elsewhere in the dataset.
+
+**Step 3 — read before concluding.** The top two rows are unremarkable (public DNS, a cloud endpoint); the interesting shape is three *different* internal hosts all funneling traffic to the same fourth host.
+
+**Step 4 — add `src_user`.** Extend the `rex` three more comma-fields past `dest_ip` to reach the user column:
+```spl
+index=botsv2 sourcetype=pan:traffic "10.0.2.101" "10.0.1.100"
+| rex "TRAFFIC,\w+,\d+,[^,]+,(?<src_ip>[^,]+),(?<dest_ip>[^,]+),[^,]+,[^,]+,[^,]+,(?<src_user>[^,]*)"
+| search src_ip=10.0.2.101 dest_ip=10.0.1.100
+| stats count by src_user | sort - count
+```
+Verified: `frothly.local\amber.turing` (173,975) and its short-domain-form duplicate `frothly\amber.turing` (5,831) dominate this pair, with a much smaller `frothly.local\service3` (106) also present. Domain is `frothly.local`; users appear as `frothly.local\<user>` or the shorter `frothly\<user>`.
 
 ### Q48 SSH brute force (linux_secure, syslog → rex)
+
+**Step 1 — isolate the signal.** `sourcetype=linux_secure "Failed password"` — the literal string is the whole filter.
+
+**Step 2 — carve the source IP.**
 ```spl
 index=botsv2 sourcetype=linux_secure "Failed password" earliest=0
 | rex "from (?<src_ip>\d+\.\d+\.\d+\.\d+)" | stats count by src_ip | sort - count
 ```
-**Verified top brute-forcers:** `58.242.83.20` (**26,174** fails), `116.31.116.17` (19,755), `58.242.83.11` (19,329), `218.65.30.126`, `116.31.116.52` — internet SSH brute force (mostly hitting `gacrux`). Classic external noise; note it and distinguish from any *successful* logon.
+**Verified top brute-forcers:** `58.242.83.20` (**26,174** fails), `116.31.116.17` (19,755), `58.242.83.11` (19,329), `218.65.30.126` (10,851), `116.31.116.52` (5,113) — internet SSH brute force, all hitting `gacrux`.
+
+**Step 3 — rank and compare.** `58.242.83.20` sits well above the rest — tens of thousands of failures from one IP is brute force, not a mistyped password.
+
+**Step 4 — sanity-check against a real login.**
+```spl
+index=botsv2 sourcetype=linux_secure host=gacrux "Accepted password" earliest=0
+```
+Verified: only **5** successful logins on `gacrux`, all `Accepted password for klager from 71.39.18.125` — a completely different IP from every brute-force source above. The brute force never actually landed; the real login is an unrelated legitimate user.
 
 ### Q49 — auditd / osquery
 `sourcetype=osquery_results` is JSON → use `spath`; `sourcetype=auditd` is `key=value`-ish → inspect `_raw` then `rex`. Deliverable = knowing which parser fits. Verified raw samples:
@@ -640,74 +669,140 @@ index=botsv2 sourcetype=linux_secure "Failed password" earliest=0
 auditd:          type=USER_AUTH msg=audit(08/31/2017 22:59:50.870:756395) : user pid=32288 uid=root auid=unset ses=unset subj=system_u:system_r:sshd_t:s0-s0:c0.c1023 msg='op=password acct=(unknown) exe=/usr/sbin/sshd hostname=? addr=58.56.184.242 terminal=ssh res=failed'
 osquery_results:  {"name":"pack_incident-response_listening_ports","hostIdentifier":"MACLORY-AIR13S.local","calendarTime":"Thu Aug 31 22:55:48 2017 UTC","unixTime":"1504220148","decorations":{"host_uuid":"564D4B96-D1CC…
 ```
-`auditd` confirms itself as space-separated `key=value` pairs (with an embedded quoted `msg='...'` sub-message) — `rex` territory, e.g. this line is the *same* SSH brute-force noise as Q48, just from Linux's audit subsystem instead of `linux_secure`. `osquery_results` confirms itself as one JSON object per line — `spath` territory; note the JSON is nested (`decorations.host_uuid`), so `spath` gives you dotted field names like `decorations.host_uuid`, not flat ones.
+`auditd` confirms itself as space-separated `key=value` pairs (with an embedded quoted `msg='...'` sub-message) — `rex` territory, e.g. this line is the *same kind* of SSH brute-force noise as Q48 (a different source IP, `58.56.184.242`, but the same `res=failed` pattern), just surfaced through Linux's audit subsystem instead of `linux_secure`. `osquery_results` confirms itself as one JSON object per line — `spath` territory; note the JSON is nested (`decorations.host_uuid`), so `spath` gives you dotted field names like `decorations.host_uuid`, not flat ones.
 
 ### Q50 MySQL
+
+**Step 1 — find the DB server.**
 ```spl
 | tstats count where index=botsv2 sourcetype=mysql:* by host | sort - count
 ```
-DB server = **`cassiopeia`** (~61M MySQL events — it dominates the whole index). The on-wire SQL is **not** in `stream:mysql` — verified 0 of 711,727 `stream:mysql` events carry a `query{}` field; it's connection/flow metadata only (bytes, ports, timing). The query text is directly in `mysql:transaction:details`'s own `SQL_TEXT` field, e.g. `hostname="gacrux", database_name="mysql", SQL_TEXT="SELECT title,cache FROM mybb_datacache"`.
+DB server = **`cassiopeia`** (~61M MySQL events — it dominates the whole index).
+
+**Step 2 — read the raw shape.** `sourcetype=mysql:* | head 5` — fields are already named in `_raw`:
+```
+2017-08-31 22:59:59 hostname="gacrux", port="3306", database_name="mysql", EVENT_ID="5", Duration="0.000149", SQL_TEXT="SELECT title,cache FROM mybb_datacache"
+```
+key="value" (quoted), not JSON — no `spath`/`rex` needed to read `SQL_TEXT` directly.
+
+**Step 3 — don't go looking in the wrong place.** It's tempting to assume the on-wire SQL lives in `stream:mysql` (it's JSON like the other `stream:*` sourcetypes) — verified **0 of 711,727** `stream:mysql` events carry a `query{}` field; it's connection/flow metadata only (bytes, ports, timing). The query text is directly in `mysql:transaction:details`'s own `SQL_TEXT` field, as shown above.
 
 ### Q51 — Two views of one event
-4688 (WinEventLog) gives account/logon context; Sysmon EID 1 gives `CommandLine` + hashes. Real triage uses both.
+`sourcetype=wineventlog:security EventCode=4688` extracts `Account_Name`, `New_Process_Name`, `Process_Command_Line` — clean account/session context, but no hashes and only a truncated command line view. Sysmon `EventCode=1` (same process-creation moment) extracts `Image`, `CommandLine`, `Hashes`, `ParentImage` — the full command line and file hashes, but weaker account/logon context. Verified on a concrete pair: a `conhost.exe` launch on `wrk-btun` at `2017-08-24 03:29:11` shows up as 4688 with `Account_Name=WRK-BTUN$` (the machine account) and separately as Sysmon EID 1 with the same `Image` plus `ParentImage`/`Hashes` that 4688 doesn't carry at all. Real triage uses both, matching each pair up by host + timestamp + `Image`/`New_Process_Name`.
 
 ### Q52 — Correlate a host
+
+**Step 1 — pull all three at once.**
 ```spl
 index=botsv2 host=wrk-bgist (sourcetype=*ysmon* OR sourcetype=wineventlog:security OR sourcetype=stream:dns) earliest="08/24/2017:00:00:00" latest="08/25/2017:00:00:00"
 | sort _time
 | table _time sourcetype EventCode Image query{}
 ```
-Verified 08/24 09:22:07 — `wrk-bgist` fires a tight cluster within the same second: `WinEventLog:Security` EventCode `4688` (×2), then `XmlWinEventLog:…Sysmon…` EventCode `5` (process-terminate) and `1` (process-create) for `C:\Windows\System32\conhost.exe`, followed by a `schtasks.exe` process-create — a console-host + scheduled-task-tool sequence worth reading top-to-bottom in the actual table. **Zero `stream:dns` rows appear** for this host in this window — consistent with Q31's finding that `stream:dns` is only captured on server hosts (`jupiter`, `cassiopeia`, `matar`, …), not on `wrk-*` workstations. That's a real gap in this host's telemetry, not a query bug: correlating a workstation across "all three" sourcetypes in practice means two (Sysmon + WinEventLog), with DNS visibility coming only from whichever server resolved the request on its behalf.
+
+**Step 2 — read it as a timeline.** Verified 08/24 09:22:07 — `wrk-bgist` fires a tight cluster within the same second: `WinEventLog:Security` EventCode `4688` (×2), then `XmlWinEventLog:…Sysmon…` EventCode `5` (process-terminate) and `1` (process-create) for `C:\Windows\System32\conhost.exe`, followed by a `schtasks.exe` process-create — a console-host + scheduled-task-tool sequence worth reading top-to-bottom in the actual table.
+
+**Step 3 — notice what's missing.** **Zero `stream:dns` rows appear** for this host in this window — consistent with Q31's finding that `stream:dns` is only captured on server hosts (`jupiter`, `cassiopeia`, `matar`, …), not on `wrk-*` workstations. That's a real gap in this host's telemetry, not a query bug: correlating a workstation across "all three" sourcetypes in practice means two (Sysmon + WinEventLog), with DNS visibility coming only from whichever server resolved the request on its behalf.
 
 ### Q53 Asset picture
+
+**Step 1 — one command, whole picture.**
 ```spl
 | tstats count where index=botsv2 by host sourcetype
 ```
-Servers: `cassiopeia` (MySQL/DB), `venus`/`jupiter`/`mercury` (perfmon/pan), `gacrux` (Linux/SSH). Workstations: `wrk-*` (Sysmon/winregistry). Two Macs — `maclory-air13` and `kutekitten` (both carry `osquery_results`); **`kutekitten`** is the `10.0.4.2` host that made the Quimitchin backdoor lookup.
+
+**Step 2 — read sourcetype as a fingerprint.** Servers: `cassiopeia` (MySQL/DB), `venus`/`jupiter`/`mercury` (perfmon/pan). Workstations: `wrk-*` (Sysmon/winregistry). `gacrux` (Linux/SSH).
+
+**Step 3 — count the Macs, then cross-reference.** Exactly two hosts carry `osquery_results`: `maclory-air13` and `kutekitten`. Cross-referencing against Q46's Suricata drill-down: **`kutekitten`** is `10.0.4.2`, the same internal host that made the Quimitchin backdoor DNS lookup — the asset inventory and the IDS finding are pointing at the same machine.
 
 ### Q54 Email attachments (`stream:smtp`)
+
+**Step 1 — list what got attached.**
 ```spl
-sourcetype=stream:smtp "attach_filename{}"=* | stats count by "attach_filename{}"
+sourcetype=stream:smtp "attach_filename{}"=* | stats count by "attach_filename{}" | sort - count
 ```
-Two incidents in one field: **`invoice.zip`** (×4 — the Taedonggang password-protected phishing lure) and **`Saccharomyces_cerevisiae_patent.docx`** (Amber Turing emailing a brewing patent to competitor *Berk Beer* — the insider thread). Also present: GoT/Office torrents, `Malware Alert Text.txt`. (Skip `sender_email` — it's populated on only a handful of events.)
+Verified full list: `Malware Alert Text.txt` (4), `invoice.zip` (4), `image.png` (2), `GoT.S7E2.BOTS.BOTS.BOTS.mkv.torrent` (1), `Office2016_Patcher_For_OSX.torrent` (1), `Saccharomyces_cerevisiae_patent.docx` (1).
+
+**Step 2 — separate signal from noise.** The torrents and `image.png` are clearly irrelevant. That leaves two real threads: `invoice.zip` (generic-sounding archive, appears 4×) and `Saccharomyces_cerevisiae_patent.docx` (a specific, real-sounding document, appears once).
+
+**Step 3 — follow each thread.** `invoice.zip` is the Taedonggang password-protected phishing lure, sent 4 times (a blast, not a one-off). `Saccharomyces_cerevisiae_patent.docx` is Amber Turing emailing a brewing patent to competitor *Berk Beer* — a one-off, insider-driven leak. Same sourcetype, two unrelated incidents. (Skip `sender_email` — it's populated on only a handful of events.)
 
 ### Q55 Symantec EP (`symantec:ep:*`)
+
+**Step 1 — enumerate first.**
 ```spl
-| tstats count where index=botsv2 sourcetype=symantec:ep:* by sourcetype
+| tstats count where index=botsv2 sourcetype=symantec:ep:* by sourcetype | sort - count
 ```
-Eight sourcetypes: `packet:file` (316,571) and `traffic:file` (67,090) dominate (network), `agent:file`/`agt_system:file` (~15k), then the high-signal singletons **`behavior:file`** and **`security:file`** (1 event each). The `:security:file` `_raw` is comma-separated — e.g. a Host-Integrity check on `wrk-aturing` (`User: amber.turing, Domain: FROTHLY`).
+Verified, all eight: `packet:file` (316,571), `traffic:file` (67,090), `agent:file` (15,835), `agt_system:file` (14,201), `scm_system:file` (357), `scan:file` (30), `behavior:file` (1), `security:file` (1).
+
+**Step 2 — split by volume.** The top four are bulk network/telemetry noise (hundreds to tens of thousands of events). `scan:file` (30) is a middle tier. `behavior:file` and `security:file` sit alone at **1 event each** — the rare, high-signal ones.
+
+**Step 3 — read the rare ones.** The `:security:file` `_raw` is comma-separated, not field-extracted — a Host-Integrity check on `wrk-aturing` (`User: amber.turing, Domain: FROTHLY`).
 
 ### Q56 FTP tooling drop (`stream:ftp`)
+
+**Step 1 — scope to downloads.** `sourcetype=stream:ftp loadway=Download` — an FTP `RETR`, a client pulling a file.
+
+**Step 2 — list what moved.**
 ```spl
 sourcetype=stream:ftp loadway=Download | stats count by filename src_ip dest_ip
 ```
-FTP server **`160.153.91.7`** served an attacker toolkit to `10.0.2.107` + `10.0.2.109`: `psexec.exe`, `nc.exe`, `wget64.exe`, `winsys64.dll`, `python-2.7.6.amd64.msi`, `dns.py` — plus **`나는_데이비드를_사랑한다.hwp`**, a Korean Hangul-word-processor file (the "unusual file for an American company"). `filename` / `method_parameter` carry the name; `loadway=Download` = an FTP `RETR`.
+FTP server **`160.153.91.7`** served an attacker toolkit to `10.0.2.107` + `10.0.2.109` (one copy to each): `psexec.exe`, `nc.exe`, `wget64.exe`, `winsys64.dll`, `python-2.7.6.amd64.msi`, `dns.py` — plus **`나는_데이비드를_사랑한다.hwp`**, a Korean Hangul-word-processor file.
+
+**Step 3 — read the filenames as a toolkit.** `psexec`/`nc`/`wget`/a Python runtime/a custom `dns.py` script is a classic dual-use lateral-movement kit. The `.hwp` file is the odd one out — a Korean document format with no business at an American brewery, a strong nationality/origin tell for whoever staged this FTP server.
 
 ### Q57 TLS issuer of the C2 (`stream:tcp`)
+
+**Step 1 — scope to the indicator.** `sourcetype=stream:tcp "45.77.65.211"` — the same IP flagged as a scanner back in Q44's step 3 comparison.
+
+**Step 2 — read the handshake field.**
 ```spl
 sourcetype=stream:tcp "45.77.65.211" | stats count by ssl_issuer
 ```
-`ssl_issuer` = **`C = US`** (14,189 flows) — a bare country-only cert (no O/CN), the self-signed look of Empire's default TLS. You read this from the handshake metadata even though the C2 payload is encrypted.
+`ssl_issuer` = **`C = US`** (14,189 flows; a further 9,868 flows have no `ssl_issuer` at all, i.e. no completed TLS handshake) — a bare country-only cert with no organization or CN, the self-signed look typical of Empire's default TLS. You read this from the handshake metadata even though the C2 payload itself is encrypted.
 
 ### Q58 Registry persistence blob (`winregistry`)
+
+**Step 1 — pick keywords.** `sourcetype=winregistry "Network" "debug"` — not a full scan of 55M events.
+
+**Step 2 — count paths.**
 ```spl
 sourcetype=winregistry "Network" "debug" | stats count by key_path
 ```
-`HKLM\software\microsoft\network\debug` (4 events) — a base64 PowerShell-Empire payload stored *in the registry*; the `Updater` scheduled task (Stage 4) reads it back at run time. "Fileless" persistence: the malware lives in a registry value, not a file. Pull `data` to see the blob.
+`HKLM\software\microsoft\network\debug` — 4 events, on **four different hosts**: `wrk-btun`, `wrk-klagerf`, `venus`, and `mercury` (i.e. not just the two workstations from Q43's funnel — the same persistence blob also landed on two servers).
+
+**Step 3 — pull the value and decode it.** `data` is base64; decoding it (UTF-16LE, the standard PowerShell `-enc` encoding) reveals a PowerShell **AMSI-bypass + WebClient downloader**: it disables `AmsiUtils`, spoofs an old-IE `User-Agent`, sets a session cookie, and pulls a second-stage payload from `https://45.77.65.211/...` — the same C2 IP referenced throughout Q44/Q57/Q60. This is the classic PowerShell-Empire stager, stored *in a registry value* instead of a file on disk (the "fileless" trick), which the scheduled task (Stage 4's `Updater` task) re-reads at run time.
 
 ### Q59 macOS confirmation (`osquery_results`)
+
+**Step 1 — enumerate the query packs.**
 ```spl
-sourcetype=osquery_results host=kutekitten "columns.path"="/Users/mkraeusen*" | stats count
+| tstats count where index=botsv2 sourcetype=osquery_results host=kutekitten by name | sort - count
 ```
-**117** file records under Mallory's home (`mkraeusen`). osquery snapshots carry `columns.sha256`/`columns.path`, so you can lift the suspicious file's hash and check it externally — this is how the incident IDs the `fpsaud`/FruitFly (Quimitchin) backdoor. The Mac has osquery but no real-time EDR: IDS *alerts*, osquery *confirms*.
+`kutekitten` reports through more than a dozen different osquery packs (`process_env`, `open_files`, `kextstat`, `listening_ports`, …) — most are hardware/process noise with no hash fields at all. The one that actually carries file hashes is a separate pack: `name=file_events` (only 5 events for this host).
+
+**Step 2 — filter to rows with a real hash.**
+```spl
+sourcetype=osquery_results host=kutekitten name=file_events "columns.hashed"="1"
+| table columns.target_path columns.md5 columns.sha1 columns.sha256
+```
+Verified: `/Users/mkraeusen/Downloads/Important_HR_INFO_for_mkraeusen` — `md5=72d4d364ed91dd9418d144a2db837a6d`, `sha1=794bcba867307bdbd5f947f6c939eb4df1d2c9b8`, `sha256=befa9bfe488244c64db096522b4fad73fc01ea8c4cd0323f1cbdee81ba008271`, mode `0777` (executable), 13,494 bytes.
+
+**Step 3 — read it as a lure.** No file extension, executable permissions, an HR-themed filename designed to get a user to double-click it — a classic social-engineering delivery for the `fpsaud`/FruitFly (Quimitchin) backdoor. (Note: a plain `"columns.path"="/Users/mkraeusen*"` filter across *all* osquery packs, as an earlier version of this hint suggested, returns 117 rows but **none** of them carry a hash — you have to land on `file_events` specifically.)
+
+**Step 4 — connect it back.** IDS *alerted* on this host's Quimitchin DNS lookups (Q46); osquery *confirms* the actual dropped file and its hash. The Mac has osquery but no real-time EDR — IDS alerts, osquery confirms.
 
 ### Q60 One indicator, six sources
+
+**Step 1 — search unscoped.**
 ```spl
 index=botsv2 "45.77.65.211" earliest="08/01/2017:00:00:00" latest="09/01/2017:00:00:00"
 | stats count by sourcetype
 | sort - count
 ```
-The C2 IP appears in **`pan:traffic`** (48,397), **`suricata`** (38,313), **`stream:tcp`** (29,069), `stream:ip` (29,060), `stream:http` (9,712), `access_combined` (4,854). One indicator confirmed by six independent telemetry sources = the report-grade backbone you build on in Stage 4.
+
+**Step 2 — read the breakdown.** The C2 IP appears in **`pan:traffic`** (48,397), **`suricata`** (38,313), **`stream:tcp`** (29,069), `stream:ip` (29,060), `stream:http` (9,712), `access_combined` (4,854) — six genuinely independent technology layers. (A handful of incidental hits also show up elsewhere — Sysmon command-line references, `apache_error`, `netstat`, `stream:dns`, a CSP violation log — but the six above are the real, independent corroboration.)
+
+**Step 3 — state the finding.** One indicator confirmed by six independent telemetry sources = the report-grade backbone you build on in Stage 4.
 
 ---
 
