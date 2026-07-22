@@ -646,7 +646,7 @@ osquery_results:  {"name":"pack_incident-response_listening_ports","hostIdentifi
 ```spl
 | tstats count where index=botsv2 sourcetype=mysql:* by host | sort - count
 ```
-DB server = **`cassiopeia`** (~61M MySQL events — it dominates the whole index). `stream:mysql` carries the on-wire SQL.
+DB server = **`cassiopeia`** (~61M MySQL events — it dominates the whole index). The on-wire SQL is **not** in `stream:mysql` — verified 0 of 711,727 `stream:mysql` events carry a `query{}` field; it's connection/flow metadata only (bytes, ports, timing). The query text is directly in `mysql:transaction:details`'s own `SQL_TEXT` field, e.g. `hostname="gacrux", database_name="mysql", SQL_TEXT="SELECT title,cache FROM mybb_datacache"`.
 
 ### Q51 — Two views of one event
 4688 (WinEventLog) gives account/logon context; Sysmon EID 1 gives `CommandLine` + hashes. Real triage uses both.

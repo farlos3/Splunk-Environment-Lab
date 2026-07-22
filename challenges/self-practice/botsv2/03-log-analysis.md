@@ -113,64 +113,137 @@ fields out of it*. Crucial lesson up front:
 
 ### Q47 — Palo Alto firewall (`pan:traffic`, CSV)
 **Find:** who's talking to whom through the firewall — but `pan:traffic` ships with **no extracted fields**, so first you have to carve `src_ip`/`dest_ip`/`src_user` out of the raw CSV yourself.
-The log is raw CSV: `… ,TRAFFIC,end,…,<src_ip>,<dest_ip>,…,<src_user>,…,<app>,…`.
-**Hint:** Read `_raw` first to count the comma positions, then `rex` positionally to pull the fields, and `stats count by` them. The domain is `frothly.local`; users appear as `frothly.local\<user>`.
+
+**Step 1 — read one raw event before writing any SPL.** `sourcetype=pan:traffic | head 1`. The log is comma-separated: `… ,TRAFFIC,end,…,<src_ip>,<dest_ip>,…,<src_user>,…,<app>,…`. Count positions from the literal `TRAFFIC` marker onward — that anchor doesn't move, even though earlier fields sometimes do.
+
+**Step 2 — carve the fields positionally.** `rex` off that `TRAFFIC,...` anchor to pull `src_ip` and `dest_ip` as named groups.
+
+**Step 3 — count the pairs, then read before concluding.** `stats count by src_ip dest_ip`, `sort` descending. Some of what dominates will be unremarkable (DNS to a public resolver, telemetry to a cloud endpoint) — the more interesting rows are *internal-to-internal* pairs converging on one host. Does that host match anything you already know its role to be from Stage 2?
+
+**Step 4 — add the username.** Extend the same `rex` to also capture `src_user` (`frothly.local\<user>`), then re-run scoped to one of the internal pairs from Step 3. Whose account is behind it, and does that account make sense for that host?
 
 ### Q48 — Linux SSH brute force (`linux_secure`, syslog)
-**Find:** whether anyone is brute-forcing SSH — the top source IPs by failed-password count, and the host they're hammering.
-Raw syslog like `Failed password for root from 116.31.116.52 port 23301 ssh2`.
-**Hint:** Search `linux_secure` for `"Failed password"`, `rex` the source IP (and user) out of the message, `stats count by src_ip`, `sort`. One external IP with tens of thousands of failures = brute force (verified: `58.242.83.20` hammering `gacrux`).
+**Find:** whether anyone is brute-forcing SSH — the top source IPs by failed-password count, and which host they're hammering.
+
+**Step 1 — isolate the signal, don't parse everything.** `sourcetype=linux_secure "Failed password"` — the literal string is the entire filter you need.
+
+**Step 2 — carve the source IP.** Raw lines look like `Failed password for root from 116.31.116.52 port 23301 ssh2` — `rex` the IP out from right after `from`. Grab the attempted username too, right before `from`.
+
+**Step 3 — rank and compare.** `stats count by src_ip`, `sort` descending. One external IP should sit an order of magnitude above the rest — tens of thousands of failures is brute force, not a mistyped password. Which internal host (`host` field) is catching all this noise?
+
+**Step 4 — sanity-check against a real login.** Search the same host for a *successful* login (`Accepted password`) around the same window — did the brute force ever actually land, or does it just bounce off?
 
 ### Q49 — Linux auditd / osquery
 **Find:** the *right parser* for two more endpoint sources — which of `auditd` / `osquery_results` is JSON, and which is key=value-ish? (The deliverable is the parsing decision, not a count.)
-**Hint:** Inspect the shape first (`sourcetype=auditd | head 20`, `sourcetype=osquery_results | head 5`): `osquery_results` is JSON → `spath`; `auditd` is key=value-ish → `rex`.
+
+**Step 1 — look before you parse.** `sourcetype=auditd | head 20` and `sourcetype=osquery_results | head 5`. Read `_raw` for both before writing a single `rex` or `spath`.
+
+**Step 2 — name the shape.** `osquery_results` is one (nested) JSON object per event — `spath` territory, which gives you dotted field names like `columns.path`, not flat ones. `auditd` is space-separated `key=value` pairs with an embedded quoted sub-message (`msg='...'`) — `rex` territory, `spath` won't help here.
+
+**Step 3 — prove it on real content.** Pull one `auditd` event that looks like SSH activity — it's the *same* kind of noise Q48 found, just surfaced through the Linux audit subsystem instead of syslog. Correctly identifying the parser is what lets you cross-reference one real event across two different sourcetypes.
 
 ### Q50 — MySQL activity
 **Find:** which host is the database server, and what the on-wire SQL looks like.
-**Hint:** For "which host is the DB server?", `tstats count by host` on `mysql:*` — one host dominates the whole index. For the on-wire SQL itself, read `sourcetype=mysql:transaction:details | head` — the query text is right there in `SQL_TEXT` (verified: `stream:mysql` is connection/flow metadata only — bytes, ports, timing — it carries no query field at all, despite what you might expect from the other `stream:*` sourcetypes).
+
+**Step 1 — find the DB server by volume.** `tstats count where index=botsv2 sourcetype=mysql:* by host`, `sort` descending — one host dominates the entire index by a wide margin.
+
+**Step 2 — read the raw shape.** `sourcetype=mysql:* | head 5`. The fields are already named for you right in `_raw` (`hostname=`, `database_name=`, `Duration=`, `SQL_TEXT=`) — no `spath`/`rex` needed for this one.
+
+**Step 3 — don't go looking in the wrong place.** It's tempting to assume the on-wire SQL lives in `stream:mysql` (it's JSON, like the other `stream:*` sourcetypes) — check for yourself: `sourcetype=stream:mysql query{}=*` and see how many results come back. The real query text is sitting in `SQL_TEXT`, directly on `mysql:transaction:details`.
 
 ## Putting sources together
 
 ### Q51 — Same event, two sources
-**Find:** what each Windows source uniquely gives you. Pick one process-creation moment on a workstation and view it from *both* `wineventlog:security` (4688) and Sysmon (EID 1) — what does each show that the other doesn't? (Sysmon → hashes/CommandLine; WinEventLog → account/logon context.)
+**Find:** what each Windows source uniquely gives you.
+
+**Step 1 — anchor on one moment.** Pick any workstation and an `EventCode=1` (Sysmon process-create) event with an interesting `Image`.
+
+**Step 2 — find its sibling.** Search the same host, the same rough second, for `sourcetype=wineventlog:security EventCode=4688` — same process, a different lens on it.
+
+**Step 3 — diff the fields.** `table` both events side by side. One source carries `CommandLine`/hashes/`ParentImage`; the other carries account/logon context the first one doesn't have at all. Neither alone tells the full story — that's the point.
 
 ### Q52 — Correlate a host across telemetry
 **Find:** the story of one host over time. For `wrk-bgist`, pull a slice of Sysmon + wineventlog + stream:dns in one window and read it top-to-bottom.
-**Hint:** Search the host across all three sourcetypes at once (an `OR` of the three), `sort` by `_time`, and `table` the key columns (`sourcetype`, `EventCode`, `Image`, `query{}`).
+
+**Step 1 — pull all three at once.** `host=wrk-bgist (sourcetype=*ysmon* OR sourcetype=wineventlog:security OR sourcetype=stream:dns)`, scoped to the Windows-endpoint time window from the table above.
+
+**Step 2 — sort and read it as a timeline.** `sort` by `_time`, `table sourcetype EventCode Image query{}` — read top-to-bottom like an analyst reconstructing what happened, not a table you filter and forget.
+
+**Step 3 — notice what's *missing*.** If one of the three sourcetypes never shows up for this host, that's not a broken query — think back to what you learned about which hosts carry which telemetry earlier in Stage 3, and work out why that gap makes sense here rather than assuming it's an error.
 
 ### Q53 — Which host is which? Build an asset picture
 **Find:** every host's role — server vs workstation vs Mac — inferred from the telemetry it emits.
-**Hint:** `tstats count by host sourcetype`, then infer: `cassiopeia`/`venus`/`jupiter` (servers — perfmon/mysql/pan), `wrk-*` (workstations — Sysmon), and two Macs `maclory-air13` + `kutekitten` (both carry `osquery_results`) — `kutekitten` (`10.0.4.2`) is the OSX-backdoor host.
+
+**Step 1 — one command, whole picture.** `tstats count where index=botsv2 by host sourcetype` — this alone gets you almost all the way there; you don't need per-host drill-downs yet.
+
+**Step 2 — read sourcetype as a fingerprint.** A host throwing `perfmon:*`/`mysql:*`/`pan:traffic` is a server. A host throwing Sysmon + `winregistry` is a Windows workstation. A host with `osquery_results` and nothing Windows-specific is a Mac.
+
+**Step 3 — count the Macs, then cross-reference.** How many distinct hosts carry `osquery_results`? You should find exactly two. Does either one line up with an indicator you've already run into earlier in Stage 3 (Q46's Suricata drill-down, for instance)?
 
 ## Email, endpoint AV & file transfer
 
 ### Q54 — Email (`stream:smtp`) — attachments tell the story
 **Find:** the suspicious email attachments — there are *two* very different threats hiding in `stream:smtp`. (Skip the sparse `sender_email`; go straight to what was attached.)
-**Hint:** `stats count by "attach_filename{}"` (mind the `{}` — it's a multivalue JSON field, quote it). You'll surface `invoice.zip` (the Taedonggang phishing lure) and `Saccharomyces_cerevisiae_patent.docx` (an *insider* sending IP to a competitor). Same sourcetype, two incidents.
+
+**Step 1 — list what got attached.** `stats count by "attach_filename{}"` (mind the `{}` — it's a multivalue JSON field, quote the whole field name). You'll get a short, readable list.
+
+**Step 2 — separate signal from noise.** Some entries are obviously irrelevant (torrents, generic images) — set those aside. What's left should split into two distinct flavors: one shaped like a generic-sounding business archive (a classic phishing-lure naming pattern), and one that reads like a real, specific internal document.
+
+**Step 3 — follow each thread separately.** For the archive: how many times does it appear, and is that one-off or a blast to multiple recipients? For the document: read its actual filename closely — does the subject matter sound like something that should be leaving the company, and who's it addressed to? These are two unrelated incidents sharing one sourcetype, not one story.
 
 ### Q55 — Endpoint AV (`symantec:ep:*`)
 **Find:** the rare, high-signal Symantec events — enumerate the several `symantec:ep:*` sourcetypes, then zero in on the ones with almost no volume.
-**Hint:** `tstats count … by sourcetype` first. `packet:file`/`traffic:file` dominate (network); `:security:file` and `:behavior:file` have just **1** event each — the interesting ones. Read a `:security:file` `_raw` (comma-separated: host, event, `Local:`/`Remote:` IPs, `User:`, `Domain:`).
+
+**Step 1 — enumerate first.** `tstats count where index=botsv2 sourcetype=symantec:ep:* by sourcetype`, `sort` descending. You'll get a handful of sourcetypes spanning several orders of magnitude in volume.
+
+**Step 2 — split by volume, not by name.** The top two or three are bulk network/telemetry noise (hundreds of thousands of events) — set those aside. What's left at the very bottom, in the single digits?
+
+**Step 3 — read the rare ones.** Pull `_raw` for whichever sourcetype(s) sit at 1-2 events — it's comma-separated, not field-extracted. What host is it on, and what does the message actually say (look for `Local:`/`Remote:` IP fields, `User:`, `Domain:`)?
 
 ### Q56 — File transfer (`stream:ftp`) — the tooling drop
 **Find:** what the attacker pulled down over FTP — list the downloaded files and spot the one that has no business at an American brewery.
-**Hint:** Filter `stream:ftp` to `loadway=Download`, then `stats count by filename src_ip dest_ip`. From one FTP server (`160.153.91.7`) the attacker pulled a toolkit onto `10.0.2.107`/`10.0.2.109`: `psexec.exe`, `nc.exe`, `wget64.exe`, `winsys64.dll`, `python-2.7.6.amd64.msi`, `dns.py` — plus a Korean-named **`.hwp`** (Hangul word-processor) document.
+
+**Step 1 — scope to downloads.** `sourcetype=stream:ftp loadway=Download` — this is an FTP `RETR`, a client pulling a file, not pushing one.
+
+**Step 2 — list what moved.** `stats count by filename src_ip dest_ip`. One external FTP server should stand out as the source for a small cluster of files landing on one or two internal hosts.
+
+**Step 3 — read the filenames as a toolkit, not a random list.** Several are recognizable dual-use admin/attacker tools (remote execution, a netcat-style utility, a downloader, a scripting runtime). One filename is written in a non-Latin script — what does that tell you about who staged this infrastructure, or at minimum, that it doesn't belong at this company?
 
 ### Q57 — TLS metadata (`stream:tcp`) — SSL issuer of the C2
 **Find:** what the C2's TLS certificate issuer looks like — you can't read the encrypted payload, but the handshake metadata is still there.
-**Hint:** Scope `stream:tcp` to the C2 IP, then `stats count by ssl_issuer`. The issuer is a suspiciously bare **`C = US`** (no org/CN) — a self-signed-looking cert is itself an indicator.
+
+**Step 1 — scope to the indicator.** Filter `stream:tcp` to `45.77.65.211` — the same IP that flagged as a scanner back in Q44's step 3 comparison.
+
+**Step 2 — read the handshake field.** `stats count by ssl_issuer`. A legitimate service's certificate usually shows a real organization/CN. What does this one show instead, and what does the *absence* of an org name usually suggest about how a certificate was generated?
 
 ### Q58 — Registry persistence (`winregistry`)
 **Find:** the APT's persistence blob hidden in the registry. `winregistry` is huge (~55M events), so search by keyword, not by scanning.
-**Hint:** Keyword-search `Network` + `debug`, then `stats count by key_path`. The value lives at `HKLM\software\microsoft\network\debug` — a base64 PowerShell-Empire payload the scheduled task re-reads at run time (a "fileless" trick). Pull `data` to see the blob.
+
+**Step 1 — pick keywords, not a scan.** You already know this is a Windows environment under active attack. Search `sourcetype=winregistry` for a couple of terms you'd expect near a network-related logging/debug key — that's a common naming pattern for a registry value nobody would think to check.
+
+**Step 2 — count, don't read blind.** `stats count by key_path` on your keyword-filtered results. You should land on a single distinct path, with only a handful of events — something that looks out of place for a stock Windows install.
+
+**Step 3 — pull the value and think about *why*.** Read `data` for that key. It won't look like plaintext — what encoding does it resemble, and why would an attacker stash a payload in a registry *value* instead of a file on disk? (Hint: think about what "fileless" is trying to evade.)
 
 ### Q59 — macOS endpoint (`osquery_results`) — confirm the Mac malware
 **Find:** the backdoor file on the Mac and its hash. The Mac (`kutekitten`) has no real-time EDR, but `osquery_results` snapshots its files — enough to confirm the malware on-host.
-**Hint:** Scope `osquery_results` to `host=kutekitten` and Mallory's home (`columns.path="/Users/mkraeusen*"`). The rows carry `columns.sha256`/`columns.path`, so you can lift the suspicious file's hash and check it externally — how the incident IDs the `fpsaud`/FruitFly malware. IDS *alerts*, osquery *confirms*.
+
+**Step 1 — scope tight.** `sourcetype=osquery_results host=kutekitten`, further filtered to the home directory of the user you already know owns this Mac from earlier in Stage 3.
+
+**Step 2 — count before reading.** How many file records come back? It should be small enough to actually read through, not thousands.
+
+**Step 3 — pull the suspicious one.** Look at `columns.path` for anything that doesn't belong in a normal user folder, then grab its `columns.sha256`. That hash is what you'd check against a malware database to identify what it actually is.
+
+**Step 4 — connect it back to Stage 3.** IDS *alerted* you to suspicious traffic from this host earlier (Q46); osquery *confirms* what's actually sitting on disk. Same host, two independent proofs — that pairing is what makes a finding report-grade instead of a hunch.
 
 ### Q60 — One indicator, every view (Stage-4 warm-up)
 **Find:** how many *different* sourcetypes saw the C2 IP `45.77.65.211` — proof of how many independent angles you have on one indicator.
-**Hint:** Search the bare IP across the whole index (wide window) and `stats count by sourcetype`, `sort` descending. It appears across `pan:traffic`, `suricata`, `stream:tcp/ip/http`, and `access_combined` — **one indicator confirmed by six independent sources** is the report-grade finding you'll build on in Stage 4.
+
+**Step 1 — search the bare indicator, unscoped.** Don't filter to one sourcetype — search the IP across the whole index, wide time window (this one shows up across most of the dataset's span).
+
+**Step 2 — count by sourcetype.** `stats count by sourcetype`, `sort` descending. You should get a handful of genuinely different technology layers — network flow metadata, IDS, web logs, firewall — all independently agreeing on the same indicator.
+
+**Step 3 — state the finding, not just the list.** How many *independent* sources does that give you? That count — not any single alert — is the report-grade statement you carry into Stage 4: this isn't a guess from one tool, it's corroborated across the entire stack.
 
 ---
 
