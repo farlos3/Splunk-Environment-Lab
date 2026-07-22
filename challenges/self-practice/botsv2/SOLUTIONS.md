@@ -621,9 +621,9 @@ Verified: `src_ip=10.0.4.2 → dest_ip=10.0.1.100`, 4 events — 5,344 alerts of
 
 **Step 1 — read the raw shape.** `sourcetype=pan:traffic | head 1`:
 ```
-… ,TRAFFIC,end,1,…,10.0.2.101,10.0.1.100,0.0.0.0,0.0.0.0,Client-Server,frothly.local\amber.turing,,dns,…
+Aug 31 15:59:37 10.0.1.1  1,2017/08/31 15:59:36,009401015183,TRAFFIC,end,1,2017/08/31 15:59:36,10.0.2.101,10.0.1.100,0.0.0.0,0.0.0.0,Client-Server,frothly.local\amber.turing,,dns,vsys1,Inside,Inside,ethernet1/3,ethernet1/2,Jupiter,2017/08/31 15:59:36,63207,1,54896,53,0,0,0x19,udp,allow,531,395,136,6,2017/08/31 15:58:58,9,any,0,3349659,0x0,10.0.0.0-10.255.255.255,10.0.0.0-10.255.255.255,0,5,1
 ```
-No auto-extracted fields at all — comma-separated, anchor on the literal `TRAFFIC` marker since the fields before it aren't fixed-width.
+No auto-extracted fields at all — comma-separated, anchor on the literal `TRAFFIC` marker since the fields before it aren't fixed-width (a syslog header, then a leading sequence number and two timestamps come before it).
 
 **Step 2 — carve `src_ip`/`dest_ip` positionally.**
 ```spl
