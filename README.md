@@ -222,3 +222,20 @@ Splunk is reading from the named volumes, not from these folders. You
 can delete their contents (or just the `.tgz` files) to reclaim disk,
 at the cost of having to re-download/re-extract before the next
 `./setup.sh --force` or `./docker/reset.sh --full`.
+
+## Continue your training — get certified
+
+This lab builds the SPL and blue-team investigation skills; a
+certification is a way to get that validated externally. **Security
+Blue Team** runs **Blue Team Level 1 (BTL1)**, a practical, hands-on
+exam (not multiple-choice) covering SOC fundamentals, phishing/log
+analysis, digital forensics, and incident response — a natural next
+step after working through the BOTS challenges here.
+
+- **[blueteamlabs.online](https://blueteamlabs.online/home)** —
+  Security Blue Team's lab platform, with investigation-style
+  challenges in the same format as the BTL1 exam. A good way to gauge
+  readiness before sitting the exam.
+- BTL1 is timed and hands-on, not memorization-based — the muscle
+  memory built here (pivoting across sourcetypes, writing SPL from
+  scratch, building a timeline across BOTSv1/v2/v3) transfers directly.
