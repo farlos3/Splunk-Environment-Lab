@@ -742,12 +742,25 @@ Verified `_raw` — fields already named, no parser needed:
 ```
 key="value" (quoted), not JSON — read `SQL_TEXT` directly, no `spath`/`rex`.
 
-**Step 3 — don't go looking in the wrong place.** It's tempting to assume the on-wire SQL lives in `stream:mysql` (it's JSON like the other `stream:*` sourcetypes). Test it instead of assuming:
+**Step 3 — don't go looking in the wrong place.** It's tempting to assume the on-wire SQL lives in `stream:mysql` (it's JSON like the other `stream:*` sourcetypes). Test it instead of assuming — run these **two separate searches** and compare:
+
+**3a — how many `stream:mysql` events exist at all?**
 ```spl
-index=botsv2 sourcetype=stream:mysql earliest=0 | stats count
-index=botsv2 sourcetype=stream:mysql query{}=* earliest=0 | stats count
+index=botsv2 sourcetype=stream:mysql earliest=0
+| stats count
 ```
-Verified: **711,727** vs **0** — not one `stream:mysql` event carries a `query{}` field. It's connection/flow metadata only (bytes, ports, timing). The query text is directly in `mysql:transaction:details`'s own `SQL_TEXT`, as shown in Step 2.
+→ **711,727**
+
+**3b — how many of those carry a `query{}` field?**
+```spl
+index=botsv2 sourcetype=stream:mysql query{}=* earliest=0
+| stats count
+```
+→ **0**
+
+Same sourcetype, same time range; the only difference is the `query{}=*` filter. 711,727 events exist, **zero** have the field — so `stream:mysql` is connection/flow metadata only (bytes, ports, timing, `flow_id`), never the SQL text itself.
+
+Sanity-check the shape yourself with `index=botsv2 sourcetype=stream:mysql earliest=0 | head 1` — you'll see keys like `bytes_in`, `dest_port`, `time_taken`, and no query field anywhere. The SQL text is in `mysql:transaction:details`'s own `SQL_TEXT`, as shown in Step 2.
 
 ### Q51 — Two views of one event
 `sourcetype=wineventlog:security EventCode=4688` extracts `Account_Name`, `New_Process_Name`, `Process_Command_Line` — clean account/session context, but no hashes and only a truncated command line view. Sysmon `EventCode=1` (same process-creation moment) extracts `Image`, `CommandLine`, `Hashes`, `ParentImage` — the full command line and file hashes, but weaker account/logon context. Verified on a concrete pair: a `conhost.exe` launch on `wrk-btun` at `2017-08-24 03:29:11` shows up as 4688 with `Account_Name=WRK-BTUN$` (the machine account) and separately as Sysmon EID 1 with the same `Image` plus `ParentImage`/`Hashes` that 4688 doesn't carry at all. Real triage uses both, matching each pair up by host + timestamp + `Image`/`New_Process_Name`.
