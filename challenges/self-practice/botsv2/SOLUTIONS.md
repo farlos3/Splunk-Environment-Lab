@@ -730,13 +730,24 @@ That's the real lesson, and it's the mirror image of Q47: `pan:traffic` genuinel
 ```
 DB server = **`cassiopeia`** (~61M MySQL events — it dominates the whole index).
 
-**Step 2 — read the raw shape.** `sourcetype=mysql:* | head 5` — fields are already named in `_raw`:
+**Step 2 — read the raw shape.**
+```spl
+index=botsv2 sourcetype=mysql:* earliest=0
+| head 5
+| table _raw
+```
+Verified `_raw` — fields already named, no parser needed:
 ```
 2017-08-31 22:59:59 hostname="gacrux", port="3306", database_name="mysql", EVENT_ID="5", Duration="0.000149", SQL_TEXT="SELECT title,cache FROM mybb_datacache"
 ```
-key="value" (quoted), not JSON — no `spath`/`rex` needed to read `SQL_TEXT` directly.
+key="value" (quoted), not JSON — read `SQL_TEXT` directly, no `spath`/`rex`.
 
-**Step 3 — don't go looking in the wrong place.** It's tempting to assume the on-wire SQL lives in `stream:mysql` (it's JSON like the other `stream:*` sourcetypes) — verified **0 of 711,727** `stream:mysql` events carry a `query{}` field; it's connection/flow metadata only (bytes, ports, timing). The query text is directly in `mysql:transaction:details`'s own `SQL_TEXT` field, as shown above.
+**Step 3 — don't go looking in the wrong place.** It's tempting to assume the on-wire SQL lives in `stream:mysql` (it's JSON like the other `stream:*` sourcetypes). Test it instead of assuming:
+```spl
+index=botsv2 sourcetype=stream:mysql earliest=0 | stats count
+index=botsv2 sourcetype=stream:mysql query{}=* earliest=0 | stats count
+```
+Verified: **711,727** vs **0** — not one `stream:mysql` event carries a `query{}` field. It's connection/flow metadata only (bytes, ports, timing). The query text is directly in `mysql:transaction:details`'s own `SQL_TEXT`, as shown in Step 2.
 
 ### Q51 — Two views of one event
 `sourcetype=wineventlog:security EventCode=4688` extracts `Account_Name`, `New_Process_Name`, `Process_Command_Line` — clean account/session context, but no hashes and only a truncated command line view. Sysmon `EventCode=1` (same process-creation moment) extracts `Image`, `CommandLine`, `Hashes`, `ParentImage` — the full command line and file hashes, but weaker account/logon context. Verified on a concrete pair: a `conhost.exe` launch on `wrk-btun` at `2017-08-24 03:29:11` shows up as 4688 with `Account_Name=WRK-BTUN$` (the machine account) and separately as Sysmon EID 1 with the same `Image` plus `ParentImage`/`Hashes` that 4688 doesn't carry at all. Real triage uses both, matching each pair up by host + timestamp + `Image`/`New_Process_Name`.
