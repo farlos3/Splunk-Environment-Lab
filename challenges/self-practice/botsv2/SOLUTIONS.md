@@ -794,7 +794,60 @@ Step 1's `tstats … by host` answers the asked question; don't let the `hostnam
 *(Aside: `stats count by SQL_TEXT` over all 27M rows works but takes minutes; the top entries are MySQL session boilerplate — `set session transaction read write` 3.7M, `SET SQL_SELECT_LIMIT=1` 3.5M — plus the monitoring query that generates this very sourcetype, reading `performance_schema.events_statements_history_long`. Scope with `head`/a time window first.)*
 
 ### Q51 — Two views of one event
-`sourcetype=wineventlog:security EventCode=4688` extracts `Account_Name`, `New_Process_Name`, `Process_Command_Line` — clean account/session context, but no hashes and only a truncated command line view. Sysmon `EventCode=1` (same process-creation moment) extracts `Image`, `CommandLine`, `Hashes`, `ParentImage` — the full command line and file hashes, but weaker account/logon context. Verified on a concrete pair: a `conhost.exe` launch on `wrk-btun` at `2017-08-24 03:29:11` shows up as 4688 with `Account_Name=WRK-BTUN$` (the machine account) and separately as Sysmon EID 1 with the same `Image` plus `ParentImage`/`Hashes` that 4688 doesn't carry at all. Real triage uses both, matching each pair up by host + timestamp + `Image`/`New_Process_Name`.
+
+Use the **Q43 stager** as the anchor — the most instructive pair in the dataset.
+
+**Step 1 — anchor on one Sysmon event.**
+```spl
+index=botsv2 sourcetype=*ysmon* EventCode=1 host=wrk-btun CommandLine="*-enc*"
+  earliest="08/24/2017:03:29:00" latest="08/24/2017:03:29:10"
+| table _time Image CommandLine ParentImage ParentProcessId ProcessId User Hashes
+```
+Verified — one event at `03:29:08`:
+
+| field | value |
+|---|---|
+| `Image` | `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe` |
+| `ParentImage` | **`C:\Windows\System32\wbem\WmiPrvSE.exe`** |
+| `ParentProcessId` | `2240` |
+| `ProcessId` | `4976` |
+| `User` | **`FROTHLY\billy.tun`** |
+| `Hashes` | `SHA1=5330FEDAD485E0E4C23B2ABE1075A1F984FDE9FC` |
+
+**Step 2 — find its 4688 sibling.** Same host, same second, other sourcetype:
+```spl
+index=botsv2 sourcetype=wineventlog:security EventCode=4688 host=wrk-btun powershell
+  earliest="08/24/2017:03:29:00" latest="08/24/2017:03:29:10"
+| table _time New_Process_Name Process_Command_Line Account_Name
+```
+Verified — the same process-creation at `03:29:08`, with `Process_Command_Line` carrying the **complete** `powershell -noP -sta -w 1 -enc WwBSAEUARgBdAC4A…` blob, and `Account_Name=WRK-BTUN$`. Read `_raw` for the fields the table hides:
+```
+Security ID:          NT AUTHORITY\NETWORK SERVICE
+Account Name:         WRK-BTUN$
+Account Domain:       FROTHLY
+New Process Name:     C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+Token Elevation Type: TokenElevationTypeLimited (3)
+Creator Process ID:   0x8c0
+```
+
+**Step 3 — diff them.**
+
+| | `wineventlog:security` 4688 | Sysmon EID 1 |
+|---|---|---|
+| Full command line | ✅ complete, base64 and all | ✅ complete |
+| **Acting user** | ❌ `WRK-BTUN$` + `NT AUTHORITY\NETWORK SERVICE` — the *machine* account | ✅ **`FROTHLY\billy.tun`** — the real user |
+| **Parent process** | ⚠️ **PID only** — `Creator Process ID: 0x8c0` | ✅ **by name** — `ParentImage=WmiPrvSE.exe` |
+| File hashes | ❌ none | ✅ `SHA1=5330FEDA…` |
+| Token elevation | ✅ `TokenElevationTypeLimited (3)` | ❌ not present |
+
+Two things worth correcting a common assumption about:
+
+1. **4688 is not "the truncated one."** On this dataset it carries the entire encoded command line — Q43 could have been solved from 4688's `Process_Command_Line` just as well as from Sysmon's `CommandLine`.
+2. **4688's account field is the *worse* one for attribution here.** It reports `WRK-BTUN$` (machine) / `NETWORK SERVICE`, because the process was spawned by a service, not an interactive logon. Sysmon's `User` is what actually names `billy.tun`.
+
+**Step 4 — the pivot that makes 4688's parent usable.** `0x8c0` is hex — convert it (`0x8c0` = **2240**) and it matches Sysmon's `ParentProcessId=2240` exactly. So 4688 *can* get you to the parent, but only via a second lookup on the PID; Sysmon hands you `WmiPrvSE.exe` directly.
+
+That is precisely why Q43's WMI-spawned finding leaned on Sysmon: **"which process launched this"** is one field in Sysmon and a hex-to-decimal PID pivot in 4688. Real triage matches the pair on host + timestamp + `Image`/`New_Process_Name`, then takes the best field from each: Sysmon for user/parent/hashes, 4688 for token elevation.
 
 ### Q52 — Correlate a host
 
