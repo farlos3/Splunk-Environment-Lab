@@ -760,7 +760,38 @@ index=botsv2 sourcetype=stream:mysql query{}=* earliest=0
 
 Same sourcetype, same time range; the only difference is the `query{}=*` filter. 711,727 events exist, **zero** have the field — so `stream:mysql` is connection/flow metadata only (bytes, ports, timing, `flow_id`), never the SQL text itself.
 
-Sanity-check the shape yourself with `index=botsv2 sourcetype=stream:mysql earliest=0 | head 1` — you'll see keys like `bytes_in`, `dest_port`, `time_taken`, and no query field anywhere. The SQL text is in `mysql:transaction:details`'s own `SQL_TEXT`, as shown in Step 2.
+Sanity-check the shape yourself with `index=botsv2 sourcetype=stream:mysql earliest=0 | head 1` — you'll see keys like `bytes_in`, `dest_port`, `time_taken`, and no query field anywhere.
+
+**Step 4 — the query that actually answers Q50.** Steps 1–3 established *where* to look; this is the one to keep:
+```spl
+index=botsv2 sourcetype=mysql:transaction:details earliest=0
+| head 20
+| table _time host hostname database_name Duration SQL_TEXT
+```
+Verified output:
+
+| _time | host | hostname | database_name | Duration | SQL_TEXT |
+|---|---|---|---|---|---|
+| 2017-08-31 22:59:59.999 | `cassiopeia` | `gacrux` | mysql | 0.000149 | `SELECT title,cache FROM mybb_datacache` |
+| 2017-08-31 22:59:59.994 | `cassiopeia` | `gacrux` | mysql | 0.009038 | `SELECT pid FROM mybb_posts WHERE tid='21' ORDER BY pid DESC LIMIT 1` |
+| 2017-08-31 22:59:59.993 | `cassiopeia` | `gacrux` | mysql | 0.010375 | `SELECT name, pid, tid, allowedgroups FROM mybb_themes …` |
+
+The workload is a **MyBB forum** (`mybb_*` tables) — ordinary application SQL, no injection or dumping visible in the top traffic.
+
+⚠️ **`host` vs `hostname` — don't mix them up.** They disagree on every row, and both are correct:
+- **`host` = `cassiopeia`** — Splunk metadata: the machine whose forwarder *shipped* the log. Verified via `tstats`: `cassiopeia` 60,786,335 events, `jabbah` 35,375, `gacrux` 98. This is the answer to "which host is the database server."
+- **`hostname` = `gacrux`** — a field *inside* the event, produced by MySQL's own `@@hostname` in the collection query. It's what the monitored DB instance calls itself.
+
+Cross-tabulating the two (`stats count by host hostname`) makes the split unambiguous — the pairing is consistent, not random:
+
+| host (forwarder) | hostname (`@@hostname`) | count |
+|---|---|---|
+| `cassiopeia` | `gacrux` | 60,324,479 |
+| `jabbah` | `ip-172-31-7-2` | 34,921 |
+
+Step 1's `tstats … by host` answers the asked question; don't let the `hostname="gacrux"` string in the raw text (Step 2) talk you out of it. Same trap as Q48, where `gacrux` is a genuinely different Linux box — the name collision is a coincidence of this dataset, not a link between the two findings.
+
+*(Aside: `stats count by SQL_TEXT` over all 27M rows works but takes minutes; the top entries are MySQL session boilerplate — `set session transaction read write` 3.7M, `SET SQL_SELECT_LIMIT=1` 3.5M — plus the monitoring query that generates this very sourcetype, reading `performance_schema.events_statements_history_long`. Scope with `head`/a time window first.)*
 
 ### Q51 — Two views of one event
 `sourcetype=wineventlog:security EventCode=4688` extracts `Account_Name`, `New_Process_Name`, `Process_Command_Line` — clean account/session context, but no hashes and only a truncated command line view. Sysmon `EventCode=1` (same process-creation moment) extracts `Image`, `CommandLine`, `Hashes`, `ParentImage` — the full command line and file hashes, but weaker account/logon context. Verified on a concrete pair: a `conhost.exe` launch on `wrk-btun` at `2017-08-24 03:29:11` shows up as 4688 with `Account_Name=WRK-BTUN$` (the machine account) and separately as Sysmon EID 1 with the same `Image` plus `ParentImage`/`Hashes` that 4688 doesn't carry at all. Real triage uses both, matching each pair up by host + timestamp + `Image`/`New_Process_Name`.
